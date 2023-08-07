@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/middleware/check-agent/ws"
+	"github.com/middleware/synthetics-agent/ws"
 	"os"
 )
 
