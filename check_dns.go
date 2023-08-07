@@ -1,4 +1,4 @@
-package main
+package synthetics_agent
 
 import (
 	"context"
