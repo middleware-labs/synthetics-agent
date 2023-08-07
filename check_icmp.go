@@ -1,12 +1,13 @@
-package main
+package syntheticsagent
 
 import (
 	"encoding/json"
 	"fmt"
-	probing "github.com/prometheus-community/pro-bing"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"strings"
 	"time"
+
+	probing "github.com/prometheus-community/pro-bing"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckPingRequest(c SyntheticsModelCustom) {

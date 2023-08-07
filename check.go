@@ -1,13 +1,14 @@
-package main
+package syntheticsagent
 
 import (
-	log "github.com/sirupsen/logrus"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var _checks map[string]*CheckState = map[string]*CheckState{}

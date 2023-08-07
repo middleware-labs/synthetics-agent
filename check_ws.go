@@ -1,4 +1,4 @@
-package main
+package syntheticsagent
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckWsRequest(c SyntheticsModelCustom) {

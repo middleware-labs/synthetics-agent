@@ -1,8 +1,9 @@
-package main
+package syntheticsagent
 
 import (
-	"github.com/middleware-labs/synthetics-agent/ws"
 	"os"
+
+	"github.com/middleware-labs/synthetics-agent/ws"
 )
 
 var _pulsar *ws.Client

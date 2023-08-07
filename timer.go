@@ -1,4 +1,4 @@
-package main
+package syntheticsagent
 
 import (
 	"fmt"
