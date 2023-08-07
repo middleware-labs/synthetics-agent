@@ -1,12 +1,13 @@
-package main
+package syntheticsagent
 
 import (
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckTcpRequest(c SyntheticsModelCustom) {

@@ -1,4 +1,4 @@
-package main
+package syntheticsagent
 
 import (
 	"crypto/md5"
@@ -10,13 +10,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func buildHttpRequest(c SyntheticsModelCustom, client *http.Client, timers map[string]float64, digest bool) (error, *http.Request) {

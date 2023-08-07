@@ -1,4 +1,4 @@
-package main
+package syntheticsagent
 
 import (
 	"bytes"
@@ -6,15 +6,18 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"github.com/middleware-labs/synthetics-agent/ws"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/middleware-labs/synthetics-agent/ws"
+
 	//"github.com/apache/pulsar-client-go/pulsar"
-	log "github.com/sirupsen/logrus"
 	"os"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func RunSyntheticWorker(typ string, location string, token string) {

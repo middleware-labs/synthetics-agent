@@ -1,14 +1,15 @@
-package main
+package syntheticsagent
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckDnsRequest(c SyntheticsModelCustom) {

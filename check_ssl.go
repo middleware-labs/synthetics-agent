@@ -1,16 +1,17 @@
-package main
+package syntheticsagent
 
 import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckSslRequest(c SyntheticsModelCustom) {
