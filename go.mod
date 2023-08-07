@@ -1,4 +1,4 @@
-module github.com/middleware-labs
+module github.com/middleware-labs/synthetics-agent
 
 go 1.18
 
