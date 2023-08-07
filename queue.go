@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/middleware/synthetics-agent/ws"
+	"github.com/middleware-labs/synthetics-agent/ws"
 	"os"
 )
 

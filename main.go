@@ -6,7 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"github.com/middleware/synthetics-agent/ws"
+	"github.com/middleware-labs/synthetics-agent/ws"
 	"io"
 	"net/http"
 	"strconv"

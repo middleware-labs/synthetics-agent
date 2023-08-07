@@ -1,10 +1,11 @@
-module github.com/middleware/synthetics-agent
+module github.com/middleware-labs/synthetics-agent
 
 go 1.18
 
 require (
 	github.com/adakailabs/go-traceroute v0.0.0-20210727014431-97524352ab91
 	github.com/cenkalti/backoff v2.2.1+incompatible
+	github.com/gogo/protobuf v1.3.2
 	github.com/gorilla/websocket v1.5.0
 	github.com/jhump/protoreflect v1.14.1
 	github.com/prometheus-community/pro-bing v0.1.0
@@ -15,7 +16,6 @@ require (
 )
 
 require (
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/google/uuid v1.3.0 // indirect
