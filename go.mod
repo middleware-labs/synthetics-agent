@@ -1,4 +1,4 @@
-module github.com/middleware/check-agent
+module github.com/middleware/synthetics-agent
 
 go 1.18
 

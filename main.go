@@ -6,7 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/json"
 	"fmt"
-	"github.com/middleware/check-agent/ws"
+	"github.com/middleware/synthetics-agent/ws"
 	"io"
 	"net/http"
 	"strconv"
@@ -16,29 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"os"
 )
-
-func main() {
-	log.SetFormatter(&log.TextFormatter{
-		DisableColors: false,
-		FullTimestamp: false,
-		ForceQuote:    false,
-		ForceColors:   true,
-		DisableQuote:  true,
-	})
-	for os.Getenv("HOSTNAME") == "" {
-		log.Fatalf("HOSTNAME env is missing..")
-	}
-
-	for _, location := range strings.Split(os.Getenv("LOCATION"), ",") {
-		go RunSyntheticWorker("location", location, os.Getenv("NCA_PASSWORD"))
-	}
-
-	// for keval
-	// go RunSyntheticWorker("agent",os.Getenv("HOSTNAME"),AGENT_TOKEN) // run host specific jobs
-	// go RunSyntheticWorker("agent","",AGENT_TOKEN)	// run any host type jobs
-
-	select {}
-}
 
 func RunSyntheticWorker(typ string, location string, token string) {
 	var topic string = ""

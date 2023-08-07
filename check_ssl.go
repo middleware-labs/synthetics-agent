@@ -1,4 +1,4 @@
-package synthetics_agent
+package main
 
 import (
 	"crypto/tls"
