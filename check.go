@@ -210,5 +210,4 @@ func (c *CheckState) update(chk *SyntheticsModelCustom) {
 
 		//c.update(txnId, nil)
 	}, fireIn, time.Duration(interval))
-
 }

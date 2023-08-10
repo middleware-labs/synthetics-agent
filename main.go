@@ -139,10 +139,12 @@ func subscribeUpdates(topic string, token string) {
 			consumer.Ack(context.Background(), msg)
 		} else {
 			v := SyntheticsModelCustom{}
+
 			err := json.Unmarshal(msg.Payload, &v)
 			if err != nil {
 				log.Printf("json decode errro %v", err)
 			} else {
+
 				if v.Action == "create" {
 					v.Action = "update"
 				}
@@ -170,19 +172,30 @@ func subscribeUpdates(topic string, token string) {
 					if v.Action == "update" {
 
 						messages[msg.Key] = msg
-						err := consumer.Nack(context.Background(), msg)
-						if err != nil {
-							log.Print("[%d] nack msg failed %v", v.Id, err)
+
+						if v.CheckTestRequest.URL != "" {
+							// ack  check-type requests.
+							err := consumer.Ack(context.Background(), msg)
+							if err != nil {
+								log.Print("ack msg failed %v", err)
+							}
+						} else {
+							err := consumer.Nack(context.Background(), msg)
+							if err != nil {
+								log.Print("[%d] nack msg failed %v", v.Id, err)
+							}
 						}
 
 						if !refresh {
-							// let others subscriber unsuscribe...
-							produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, UnsubscribePayload{
-								Not:        instanceId,
-								Action:     "unsub",
-								Id:         v.Id,
-								AccountUID: v.AccountUID,
-							})
+							if v.CheckTestRequest.URL == "" {
+								// let others subscriber unsuscribe...
+								produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, UnsubscribePayload{
+									Not:        instanceId,
+									Action:     "unsub",
+									Id:         v.Id,
+									AccountUID: v.AccountUID,
+								})
+							}
 
 							RunCheck(&v)
 						}
