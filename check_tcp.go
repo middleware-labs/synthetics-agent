@@ -126,8 +126,24 @@ func CheckTcpRequest(c SyntheticsModelCustom) {
 		}
 	}
 
-	resultStr, _ := json.Marshal(assertions)
-	attrs.PutStr("assertions", string(resultStr))
+	if c.CheckTestRequest.URL == "" {
+		resultStr, _ := json.Marshal(assertions)
+		attrs.PutStr("assertions", string(resultStr))
 
-	FinishCheckRequest(c, _Status, _Message, timers, attrs)
+		FinishCheckRequest(c, _Status, _Message, timers, attrs)
+	} else {
+		_testBody := make(map[string]interface{}, 0)
+		_testBody["assertions"] = []map[string]interface{}{
+			{
+				"type": "response_time",
+				"config": map[string]string{
+					"operator": "is",
+					"value":    fmt.Sprintf("%v", timers["duration"]),
+				},
+			},
+		}
+		_testBody["connection_status"] = status
+		_testBody["tookMs"] = fmt.Sprintf("%.2f ms", timers["duration"])
+		WebhookSendCheckRequest(c, _testBody)
+	}
 }

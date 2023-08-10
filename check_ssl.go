@@ -21,6 +21,30 @@ func CheckSslRequest(c SyntheticsModelCustom) {
 	_Message := ""
 	_host := c.Endpoint + ":" + c.Request.Port
 
+	_testBody := map[string]interface{}{
+		"assertions": make([]map[string]interface{}, 0),
+		"tookMs":     "0 ms",
+		"issued_to": map[string]string{
+			"Alternative Name": "N/A",
+			"Common Name":      "N/A",
+		},
+		"issued_by": map[string]string{
+			"Common Name":  "N/A",
+			"Country":      "N/A",
+			"Organization": "N/A",
+		},
+		"certificate": map[string]string{
+			"Fingerprint SHA-1":   "N/A",
+			"Fingerprint SHA-256": "N/A",
+			"Not Valid After":     "N/A",
+			"Not Valid Before":    "N/A",
+		},
+		"connection": map[string]string{
+			"Cipher used": "",
+			"Protocol":    "",
+		},
+	}
+
 	timers := map[string]float64{
 		"duration":   0,
 		"dns":        0,
@@ -36,7 +60,7 @@ func CheckSslRequest(c SyntheticsModelCustom) {
 	dnsIps, _ := net.LookupIP(_host)
 	timers["dns"] = timeInMs(time.Since(_start))
 
-	_ips := []string{}
+	_ips := make([]string, 0)
 	for _, ip := range dnsIps {
 		_ips = append(_ips, ip.String())
 	}
@@ -117,6 +141,26 @@ func CheckSslRequest(c SyntheticsModelCustom) {
 		attrs.PutStr("check.details.subject", cert.Subject.String())
 		attrs.PutStr("check.details.is_ca", strconv.FormatBool(cert.IsCA))
 
+		_testBody["issued_to"] = map[string]string{
+			"Alternative Name": strings.Join(cert.DNSNames, ", "),
+			"Common Name":      cert.Issuer.CommonName,
+		}
+		_testBody["issued_by"] = map[string]string{
+			"Common Name":  cert.Issuer.CommonName,
+			"Country Name": strings.Join(cert.Issuer.Country, ", "),
+			"Organization": strings.Join(cert.Issuer.Organization, ", "),
+		}
+
+		_testBody["certificate"] = map[string]string{
+			"Fingerprint":      cert.SignatureAlgorithm.String(),
+			"Not Valid After":  cert.NotAfter.String(),
+			"Not Valid Before": cert.NotBefore.String(),
+		}
+		_testBody["connection"] = map[string]string{
+			"CipherSuite": tls.CipherSuiteName(conn.ConnectionState().CipherSuite),
+			"Protocol":    ver,
+		}
+
 		assertions = append(assertions, map[string]string{
 			"type":   "certificate",
 			"reason": "is valid",
@@ -141,6 +185,16 @@ func CheckSslRequest(c SyntheticsModelCustom) {
 				_Status = "FAIL"
 				_Message = fmt.Sprintf("hostname doesn't matched with %s %v", strings.Join(cert.DNSNames, ","), hostMatchedErr.Error())
 			}
+		}
+
+		_testBody["assertions"] = []map[string]interface{}{
+			{
+				"type": "certificate",
+				"config": map[string]string{
+					"operator": "expires_in_greater_then_days",
+					"value":    strconv.FormatInt(expiryDays, 10),
+				},
+			},
 		}
 
 		for _, assert := range c.Request.Assertions.Ssl.Cases {
@@ -187,5 +241,17 @@ func CheckSslRequest(c SyntheticsModelCustom) {
 	resultStr, _ := json.Marshal(assertions)
 	attrs.PutStr("assertions", string(resultStr))
 
-	FinishCheckRequest(c, _Status, _Message, timers, attrs)
+	if c.CheckTestRequest.URL == "" {
+		FinishCheckRequest(c, _Status, _Message, timers, attrs)
+	} else {
+		_testBody["assertions"] = append(_testBody["assertions"].([]map[string]interface{}), map[string]interface{}{
+			"type": "response_time",
+			"config": map[string]string{
+				"operator": "is",
+				"value":    fmt.Sprintf("%v", timers["duration"]),
+			},
+		})
+		_testBody["tookMs"] = fmt.Sprintf("%.2f ms", timers["duration"])
+		WebhookSendCheckRequest(c, _testBody)
+	}
 }

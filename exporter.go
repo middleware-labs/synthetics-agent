@@ -186,17 +186,14 @@ func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string, t
 
 func WebhookSendCheckRequest(c SyntheticsModelCustom, opts map[string]interface{}) {
 	go func() {
+		log.Println("Calling WebhookSendCheckRequest")
 		if c.CheckTestRequest.URL != "" {
-			go func() {
-				resStr, _ := MakeRequest(RequestOptions{
-					URL:     c.CheckTestRequest.URL,
-					Headers: c.CheckTestRequest.Headers,
-					Method:  "POST",
-					Body:    opts,
-				})
-
-				log.Printf("MakeRequest--test request %s", resStr)
-			}()
+			_, _ = MakeRequest(RequestOptions{
+				URL:     c.CheckTestRequest.URL,
+				Headers: c.CheckTestRequest.Headers,
+				Method:  "POST",
+				Body:    opts,
+			})
 		}
 	}()
 }

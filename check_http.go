@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptrace"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -34,7 +35,6 @@ func buildHttpRequest(c SyntheticsModelCustom, client *http.Client, timers map[s
 	for _, header := range strings.Split(c.Request.HTTPPayload.Cookies, "\n") {
 		req.Header.Add("Set-Cookie", strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(header, "\t", ""), "\n", ""), "\r", "")))
 	}
-	//log.Printf("c.Request.HTTPPayload.Authentication %v", c.Request.HTTPPayload.Authentication)
 
 	if c.Request.HTTPPayload.Authentication.Type == "basic" && c.Request.HTTPPayload.Authentication.Basic.Username != "" && c.Request.HTTPPayload.Authentication.Basic.Password != "" {
 		req.Header.Set("Authorization", c.Request.HTTPPayload.Authentication.Basic.Username+":"+c.Request.HTTPPayload.Authentication.Basic.Password)
@@ -109,6 +109,19 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 		"body_read":  0.0,
 	}
 
+	parsedURL, _ := url.Parse(c.Endpoint)
+	_testBody := map[string]interface{}{
+		"headers":    make(map[string]string),
+		"assertions": make([]map[string]interface{}, 0),
+		"statusCode": 302,
+		"method":     c.Request.HTTPMethod,
+		"url":        c.Endpoint,
+		"authority":  parsedURL.Host,
+		"path":       parsedURL.Path + "?" + parsedURL.RawQuery,
+		"tookMs":     "0 ms",
+		"body":       "",
+	}
+
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -129,11 +142,16 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 		},
 	}
 
-	rErr, req := buildHttpRequest(c, client, timers, true)
+	rErr, httpReq := buildHttpRequest(c, client, timers, true)
+
 	if rErr != nil {
 		_Status = "ERROR"
 		timers["duration"] = timeInMs(time.Since(_start))
 		_Message = fmt.Sprintf("error while requesting %v", rErr)
+
+		_testBody["tookMs"] = fmt.Sprintf("%.2f ms", timers["duration"])
+		_testBody["body"] = _Message
+		_testBody["statusCode"] = 500
 
 		for _, assert := range c.Request.Assertions.HTTP.Cases {
 			assertions = append(assertions, map[string]string{
@@ -183,12 +201,16 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 				timers["first_byte"] = timeInMs(time.Since(_tlsDone))
 			},
 		}
-		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
-		resp, err := client.Do(req)
+		reqCtx := httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
+		resp, err := client.Do(reqCtx)
 		if err != nil {
 			timers["duration"] = timeInMs(time.Since(_start))
 			_Status = "ERROR"
 			_Message = fmt.Sprintf("error while sending request %v", err)
+
+			_testBody["tookMs"] = fmt.Sprintf("%v ms", timers["duration"])
+			_testBody["body"] = _Message
+			_testBody["statusCode"] = 500
 
 			for _, assert := range c.Request.Assertions.HTTP.Cases {
 				assertions = append(assertions, map[string]string{
@@ -219,9 +241,18 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 
 			timers["duration"] = timeInMs(time.Since(_start))
 
+			_testBody["tookMs"] = fmt.Sprintf("%v ms", timers["duration"])
+			_testBody["body"] = bss
+			_testBody["statusCode"] = resp.StatusCode
+
+			_hdr := make(map[string]string)
 			for k, v := range resp.Header {
+				_hdr[k] = strings.Join(v, ",")
 				attrs.PutStr("check.details.headers."+k, strings.Join(v, ","))
 			}
+
+			_testBody["headers"] = _hdr
+
 			attrs.PutStr("check.details.body_size", fmt.Sprintf("%d KB\n", len(bs)/1024))
 			//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
 
@@ -336,8 +367,39 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 	if !isCheckTestReq {
 		FinishCheckRequest(c, _Status, _Message, timers, attrs)
 	} else {
-		//--Finish
-		//WebhookSendCheckRequest(c, _body)
+
+		_asert := []map[string]interface{}{
+			{
+				"type": "status_code",
+				"config": map[string]string{
+					"operator": "is",
+					"value":    fmt.Sprintf("%v", _testBody["statusCode"]),
+				},
+			},
+			{
+				"type": "response_time",
+				"config": map[string]string{
+					"operator": "is",
+					"value":    fmt.Sprintf("%v", timers["duration"]),
+				},
+			},
+		}
+
+		if h, k := _testBody["headers"].(map[string]string); k && h != nil {
+			_asert = append(_asert, map[string]interface{}{
+				"type": "header",
+				"config": map[string]string{
+					"operator": "is",
+					"target":   "Content-Type",
+					"value":    h["Content-Type"],
+				},
+			})
+		}
+
+		_testBody["assertions"] = _asert
+		_testBody["tookMs"] = fmt.Sprintf("%.2f ms", timers["duration"])
+
+		WebhookSendCheckRequest(c, _testBody)
 	}
 }
 

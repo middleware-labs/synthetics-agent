@@ -64,6 +64,12 @@ func (c SyntheticsModelCustom) fire() {
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
 
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error(r)
+		}
+	}()
+
 	if c.Request.SpecifyFrequency.Type == "advanced" && c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
@@ -173,6 +179,12 @@ func (c *CheckState) update(chk *SyntheticsModelCustom) {
 
 	//diffx := (time.Now().UTC().Unix() - c.check.CreatedAt)
 	//log.Printf("[%d] next fire ins %s", c.check.Id, time.Duration((c.check.IntervalSeconds-(diffx%c.check.IntervalSeconds))*int64(time.Second)).String())
+
+	if chk.CheckTestRequest.URL != "" {
+		c.check.fire()
+		//RemoveCheck(c.check)
+		return
+	}
 
 	c.timerStop = TimerNew(func() {
 		firingLock.Lock()

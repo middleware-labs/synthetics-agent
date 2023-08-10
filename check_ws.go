@@ -36,6 +36,16 @@ func CheckWsRequest(c SyntheticsModelCustom) {
 		log.Printf("root certificates error  %v", rtErr)
 	}
 
+	_testBody := map[string]interface{}{
+		"url":              c.Endpoint,
+		"host":             "N/A",
+		"version":          "HTTP/1.1",
+		"req_conn":         "N/A",
+		"sent_message":     c.Request.WSPayload.Message,
+		"received_message": "N/A",
+		"headers":          make(map[string]string),
+	}
+
 	netDialer := &net.Dialer{
 		Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
 		Resolver: &net.Resolver{
@@ -87,6 +97,11 @@ func CheckWsRequest(c SyntheticsModelCustom) {
 		)))
 	}
 	conn, httpResp, err := wsDialer.Dial(c.Endpoint, headers)
+
+	if httpResp != nil {
+		_testBody["version"] = httpResp.Proto
+	}
+
 	if err != nil {
 		timers["duration"] = timeInMs(time.Since(_start))
 		_Status = "FAIL"
@@ -125,11 +140,22 @@ func CheckWsRequest(c SyntheticsModelCustom) {
 						attrs.PutInt("ws.message_type", int64(msgType))
 						attrs.PutInt("ws.message_length", int64(len(msg)))
 						recMsg = string(msg)
+						_testBody["received_message"] = recMsg
 					}
 				}
 			}
 		}
 
+	}
+
+	if httpResp != nil && len(httpResp.Header) > 0 {
+		_testBody["req_conn"] = httpResp.Header.Get("Connection")
+		_testBody["host"] = httpResp.Request.Host
+		_headers := make(map[string]string)
+		for k, v := range httpResp.Header {
+			_headers[k] = v[0]
+		}
+		_testBody["headers"] = _headers
 	}
 
 	for _, assert := range c.Request.Assertions.WebSocket.Cases {
@@ -185,9 +211,30 @@ func CheckWsRequest(c SyntheticsModelCustom) {
 		}
 	}
 
-	resultStr, _ := json.Marshal(assertions)
-	attrs.PutStr("assertions", string(resultStr))
+	if c.CheckTestRequest.URL == "" {
+		resultStr, _ := json.Marshal(assertions)
+		attrs.PutStr("assertions", string(resultStr))
 
-	FinishCheckRequest(c, _Status, _Message, timers, attrs)
+		FinishCheckRequest(c, _Status, _Message, timers, attrs)
+	} else {
+		_asr := make([]map[string]interface{}, 0)
+		_asr = append(_asr, map[string]interface{}{
+			"type": "response_time",
+			"config": map[string]string{
+				"operator": "is",
+				"value":    fmt.Sprintf("%v", timers["duration"]),
+			},
+		})
+		_asr = append(_asr, map[string]interface{}{
+			"type": "received_message",
+			"config": map[string]string{
+				"operator": "is",
+				"value":    recMsg,
+			},
+		})
+		_testBody["assertions"] = _asr
+		_testBody["tookMs"] = fmt.Sprintf("%.2f ms", timers["duration"])
+		WebhookSendCheckRequest(c, _testBody)
+	}
 
 }
