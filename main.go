@@ -154,7 +154,7 @@ func subscribeUpdates(topic string, token string) {
 
 					if ok && messages[msg.Key].MsgId == msg.MsgId {
 						refresh = true
-						log.Printf("[%d] job refresh key:%s ", v.Id, msg.Key)
+						//log.Printf("[%d] job refresh key:%s ", v.Id, msg.Key)
 					} else if ok && messages[msg.Key].MsgId != msg.MsgId {
 						log.Printf("[%d] job update key:%s ", v.Id, msg.Key)
 						err := consumer.Ack(context.Background(), messages[msg.Key])
@@ -196,9 +196,9 @@ func subscribeUpdates(topic string, token string) {
 									AccountUID: v.AccountUID,
 								})
 							}
-
 							RunCheck(&v)
 						}
+
 					} else {
 						delete(messages, msg.Key)
 						err := consumer.Ack(context.Background(), msg)

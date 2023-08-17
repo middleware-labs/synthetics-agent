@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,7 +113,7 @@ func exportMetrics() {
 						}
 						log.Errorf("[Dur: %s] error exporting items, request to %s responded with HTTP Status Code %d\n\n%s\n\n", time.Since(start).String(), endpoint, resp.StatusCode, string(body))
 					} else {
-						log.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
+						//log.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
 					}
 				}
 			}()
@@ -147,7 +146,6 @@ func exportClient() *http.Client {
 }
 
 func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string, timers map[string]float64, attrs pcommon.Map) {
-
 	testId := strconv.Itoa(c.Id) + "-" + os.Getenv("LOCATION") + "-" + strconv.Itoa(int(time.Now().UnixNano()))
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
