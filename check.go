@@ -61,7 +61,6 @@ func assertInt(data int64, assert CaseOptions) bool {
 	return true
 }
 
-
 func (c SyntheticsModelCustom) fire() {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
