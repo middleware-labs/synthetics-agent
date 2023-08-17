@@ -60,7 +60,9 @@ func assertInt(data int64, assert CaseOptions) bool {
 	}
 	return true
 }
+
 func (c SyntheticsModelCustom) fire() {
+
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
 
@@ -171,11 +173,13 @@ func (c *CheckState) update(chk *SyntheticsModelCustom) {
 		c.timerStop()
 	}
 
-	diff := time.Now().UTC().UnixNano() - (c.check.CreatedAt.UTC().Unix()+20)*int64(time.Second)
-	interval := int64(c.check.IntervalSeconds) * int64(time.Second)
-	fireIn := time.Duration(interval - (diff % interval))
+	diff := time.Now().UTC().UnixMilli() - (c.check.CreatedAt.UTC().UnixMilli() + 20)
+	interval := int64(c.check.IntervalSeconds) * 1000
+	fireIn := time.Duration(interval-(diff%interval)) * time.Millisecond
 
-	log.Printf("[%d] next fire in %s interval:%d", c.check.Id, fireIn.String(), c.check.IntervalSeconds)
+	intervalDuration := time.Duration(c.check.IntervalSeconds) * time.Second
+
+	log.Printf("[%d] next fire in %s interval:%s", c.check.Id, fireIn.String(), intervalDuration.String())
 
 	//diffx := (time.Now().UTC().Unix() - c.check.CreatedAt)
 	//log.Printf("[%d] next fire ins %s", c.check.Id, time.Duration((c.check.IntervalSeconds-(diffx%c.check.IntervalSeconds))*int64(time.Second)).String())
@@ -196,10 +200,19 @@ func (c *CheckState) update(chk *SyntheticsModelCustom) {
 		firingLock.Unlock()
 
 		if !lock.TryLock() {
-			//log.Printf("not allowed to run twice at same time")
+			log.Printf("not allowed to run twice at same time")
 			return
 		}
-		log.Printf("[%d] fired %d, routings:%d", c.check.Id, time.Now().Second(), runtime.NumGoroutine())
+
+		diff := time.Now().UTC().UnixMilli() - (c.check.CreatedAt.UTC().UnixMilli() + 20*1000)
+		interval := int64(c.check.IntervalSeconds) * 1000
+		offBy := time.Duration((diff % interval)) * time.Millisecond
+
+		log.Printf("[%3d] fired %9d, routines:%8d	off:%s", c.check.Id, time.Now().Second(), runtime.NumGoroutine(), offBy.String())
+
+		if offBy > 2*time.Second {
+			log.Printf("------------------")
+		}
 
 		c.check.fire()
 
@@ -209,6 +222,5 @@ func (c *CheckState) update(chk *SyntheticsModelCustom) {
 		firingLock.Unlock()
 
 		//c.update(txnId, nil)
-	}, fireIn, time.Duration(interval))
-
+	}, fireIn, intervalDuration)
 }
