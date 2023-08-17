@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,46 +82,55 @@ func exportMetrics() {
 		}
 		tr := pmetricotlp.NewExportRequestFromMetrics(mdd)
 
+		wg.Add(1)
+		go func(account string, tr pmetricotlp.ExportRequest) {
+			exportProtoRequest(account, tr)
+			wg.Done()
+		}(account, tr)
 		///log.Printf("exporting ", resources, scopes, metrics, account)
 
-		request, err := tr.MarshalProto()
-		if err != nil {
-			log.Printf("error with proto %v", err)
-		} else {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				start := time.Now()
-				endpoint := strings.ReplaceAll(os.Getenv("CAPTURE_ENDPOINT"), "{ACC}", account)
-				req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(request))
-				if err != nil {
-					log.Errorf("error while exporting metrics %v", err)
-					return
-				}
-				req.Header.Set("Content-Type", "application/x-protobuf")
-				req.Header.Set("User-Agent", "ncheck-agent")
-
-				resp, err := exportClient().Do(req)
-				if err != nil {
-					log.Errorf("[Dur: %s] failed to make an HTTP request: %v", time.Since(start).String(), err)
-				} else {
-					if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
-						// Request is successful.
-						body, err := io.ReadAll(resp.Body)
-						if err != nil {
-							log.Errorf("error reading body %v", err)
-						}
-						log.Errorf("[Dur: %s] error exporting items, request to %s responded with HTTP Status Code %d\n\n%s\n\n", time.Since(start).String(), endpoint, resp.StatusCode, string(body))
-					} else {
-						log.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
-					}
-				}
-			}()
-		}
 	}
 	//re := time.Since(start_export).String()
 	wg.Wait()
 	//log.Printf("export job(%d) fininished in %s but requests in %s", len(all), re, time.Since(start_export).String())
+}
+
+func exportProtoRequest(account string, tr pmetricotlp.ExportRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("error exporting account (%s) metrics %v %v", account, r, tr)
+		}
+	}()
+	request, err := tr.MarshalProto()
+	if err != nil {
+		log.Printf("error with proto %v", err)
+	} else {
+		start := time.Now()
+		endpoint := strings.ReplaceAll(os.Getenv("CAPTURE_ENDPOINT"), "{ACC}", account)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(request))
+		if err != nil {
+			log.Errorf("error while exporting metrics %v", err)
+			return
+		}
+		req.Header.Set("Content-Type", "application/x-protobuf")
+		req.Header.Set("User-Agent", "ncheck-agent")
+
+		resp, err := exportClient().Do(req)
+		if err != nil {
+			log.Errorf("[Dur: %s] failed to make an HTTP request: %v", time.Since(start).String(), err)
+		} else {
+			if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
+				// Request is successful.
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					log.Errorf("error reading body %v", err)
+				}
+				log.Errorf("[Dur: %s] error exporting items, request to %s responded with HTTP Status Code %d\n\n%s\n\n", time.Since(start).String(), endpoint, resp.StatusCode, string(body))
+			} else {
+				//log.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
+			}
+		}
+	}
 }
 
 var _eclient *http.Client
@@ -147,7 +155,6 @@ func exportClient() *http.Client {
 }
 
 func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string, timers map[string]float64, attrs pcommon.Map) {
-
 	testId := strconv.Itoa(c.Id) + "-" + os.Getenv("LOCATION") + "-" + strconv.Itoa(int(time.Now().UnixNano()))
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
