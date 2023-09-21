@@ -99,7 +99,11 @@ func (c SyntheticsModelCustom) fire() {
 	}
 
 	if c.Proto == "http" {
-		CheckHttpRequest(c)
+		if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
+			CheckHTTPMultiStepsRequest(c)
+		} else {
+			CheckHttpRequest(c)
+		}
 	}
 	if c.Proto == "tcp" {
 		CheckTcpRequest(c)
