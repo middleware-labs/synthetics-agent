@@ -134,7 +134,15 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 		const pattern = /{{\$(\d+)\.(.*?)}}/g
 		const JSONPaths = {}
 		const stepsResponse = {}
-		const assertionsSteps = {}
+		const _assertions = {}
+		for (const assert of asserts) {
+			_assertions[assert.type] = {
+				"type":   assert.type,
+				"reason": (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
+				"actual": "N/A",
+				"status": 'FAIL',
+			}
+		}
 	
 		for (let i = 0; i < steps.length; i++) {
 			const stepKey = 'step_' + i
@@ -207,68 +215,65 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 				{ headers: headers }
 			)
 
-			const _validations = []
+			stepsResponse[stepKey] = response.json()
+
 			for (const assert of asserts) {
 				if (assert.type === 'status_code') {
-					if (assert.config.operator === 'is') {
-						let _obj = {
-							"type":   assert.type,
-							"reason": 'Status Code is ' + assert.config.value,
-							"actual": 'N/A',
-							"status": 'FAIL',
-						}
-	
-						check(response, {
-							['status is ' + assert.config.value]: (r) => {
-								let _val = r.status === parseInt(assert.config.value)
-								_obj.actual = r.status
-								if (_val) {
-									_obj.status = "PASS"
-								}
-								return _val
-							},
+					const _op = assert.config.operator
+					const _vl = parseInt(assert.config.value)
+					let sOk = false
+					_assertions[assert.type].actual = response.status
+					if (_op === 'is') {
+						sOk = check(response, {
+							['status is ' + assert.config.value]: (r) => r.status === _vl,
 						})
-						_validations.push(_obj)
+					} else if (_op === "is_not") {
+						sOk = check(response, {
+							['status is not' + assert.config.value]: (r) => r.status !== _vl,
+						})
+					} else if (_op === "contains") {
+						sOk = check(response, {
+							['status contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) > -1,
+						})
+					} else if (_op === "not_contains") {
+						sOk = check(response, {
+							['status not contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) === -1,
+						})
+					} else if (_op === "match_regex") {
+						sOk = check(response, {
+							['status match_regex' + assert.config.value]: (r) => (r.status + '').match(_vl),
+						})
+					} else if (_op === "not_match_regex") {
+						sOk = check(response, {
+							['status not match_regex' + assert.config.value]: (r) => !(r.status + '').match(_vl),
+						})
+					}
+					if (sOk) {
+						_assertions[assert.type].status = "PASS"
+					} else {
+						break
 					}
 				} else if (assert.type === 'response_time') {
-					let _obj = {
-						"type":   assert.type,
-						"reason": 'Response Time is ' + assert.config.operator + ' ' + assert.config.value,
-						"actual": 'N/A',
-						"status": 'FAIL',
-					}
+					_assertions[assert.type].actual = response.timings.duration
+					let sOk = false
 					if (assert.config.operator === 'less_than') {
-						check(response, {
-							['response time is less than ' + assert.config.value]: (r) => {
-								let _val = r.timings.duration < parseInt(assert.config.value)
-								_obj.actual = r.timings.duration
-								if (_val) {
-									_obj.status = 'PASS'
-								}
-								return _val
-							},
+						sOk = check(response, {
+							['response time is less than ' + assert.config.value]: (r) => r.timings.duration < parseInt(assert.config.value),
 						})
 					} else if (assert.config.operator === 'greater_than') {
-						check(response, {
-							['response time is greater than ' + assert.config.value]: (r) => {
-								let _val = r.timings.duration > parseInt(assert.config.value)
-								_obj.actual = r.timings.duration
-								if (_val) {
-									_obj.status = 'PASS'
-								}
-								return _val
-							},
+						sOk = check(response, {
+							['response time is greater than ' + assert.config.value]: (r) => r.timings.duration > parseInt(assert.config.value),
 						})
 					}
-					_validations.push(_obj)
+					if (sOk) {
+						_assertions[assert.type].status = "PASS"
+					} else {
+						break
+					}
 				}
-			}
-
-			assertionsSteps[stepKey] = _validations
-
-			stepsResponse[stepKey] = response.json()
+        	}
 		}
-		console.log('###START->', {steps: stepsResponse, assertions: assertionsSteps}, '<-END###')
+		console.log('###START->', {steps: stepsResponse, assertions: _assertions}, '<-END###')
 	}
 
 	`
@@ -292,10 +297,6 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 		stepsJson, _ := json.Marshal(steps)
 		k6Script = strings.ReplaceAll(k6Script, "[] //##MULTI_STEPS", ""+string(stepsJson))
 
-		//if req.CheckTestRequest.URL != "" {
-		//	assert, _ := json.Marshal(req.Request.Assertions.HTTP.Cases)
-		//	k6Script = strings.ReplaceAll(k6Script, "[] //##STEPS_ASSERTIONS", ""+string(assert))
-		//}
 		assert, _ := json.Marshal(req.Request.Assertions.HTTP.Cases)
 		k6Script = strings.ReplaceAll(k6Script, "[] //##STEPS_ASSERTIONS", ""+string(assert))
 	}

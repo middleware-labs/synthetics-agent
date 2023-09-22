@@ -403,61 +403,6 @@ func CheckHttpRequest(c SyntheticsModelCustom) {
 	}
 }
 
-func CheckHTTPMultiStepsRequest(c SyntheticsModelCustom) {
-	_start := time.Now()
-	timers := map[string]float64{
-		"duration": 0.0,
-	}
-	_Status := "OK"
-	_Message := ""
-	assertions := make([]map[string]string, 0)
-
-	attrs := pcommon.NewMap()
-	isCheckTestReq := c.CheckTestRequest.URL != ""
-	scriptSnippet := CreateScriptSnippet(c)
-
-	//fmt.Println("k6Script--->", scriptSnippet)
-
-	respValue, exeErr := ExecK6Script(scriptSnippet)
-	fmt.Println("exeErr--->", exeErr)
-
-	timers["duration"] = timeInMs(time.Since(_start))
-
-	response := make(map[string]interface{}, 0)
-	_ = json.Unmarshal([]byte(respValue), &response)
-
-	if isCheckTestReq {
-		resSteps := response["steps"]
-		_testBody := map[string]interface{}{
-			"multiStepPreview": true,
-			"body":             resSteps,
-		}
-		WebhookSendCheckRequest(c, _testBody)
-	} else {
-		if assertStep, ok := response["assertions"].(map[string]interface{}); ok {
-			for stepKey, assert := range assertStep {
-				_obj := make(map[string]string)
-				// todo: need to discuss with meghraj
-				for _, value := range assert.([]interface{}) {
-					if asrt, k := value.(map[string]interface{}); k {
-						if val, s := asrt["status"].(string); s {
-							if val == "FAIL" {
-								_Status = val
-								_Message = "Step " + strings.Replace(stepKey, "step_", "", 1) + " status is FAIL"
-							}
-						}
-					}
-				}
-				assertions = append(assertions, _obj)
-			}
-		}
-
-		resultStr, _ := json.Marshal(assertions)
-		attrs.PutStr("assertions", string(resultStr))
-		FinishCheckRequest(c, _Status, _Message, timers, attrs)
-	}
-}
-
 func getMD5(text string) string {
 	hasher := md5.New()
 	hasher.Write([]byte(text))
