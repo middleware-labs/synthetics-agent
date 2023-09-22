@@ -20,6 +20,8 @@ func CheckHTTPMultiStepsRequest(c SyntheticsModelCustom) {
 	isCheckTestReq := c.CheckTestRequest.URL != ""
 	scriptSnippet := CreateScriptSnippet(c)
 
+	//fmt.Println("scriptSnippet-->", scriptSnippet)
+
 	respValue, exeErr := ExecK6Script(scriptSnippet)
 	timers["duration"] = timeInMs(time.Since(_start))
 
@@ -53,9 +55,15 @@ func CheckHTTPMultiStepsRequest(c SyntheticsModelCustom) {
 		})
 	} else {
 		if assertStep, ok := response["assertions"].(map[string]interface{}); ok {
+			isfail := false
 			for _, assert := range assertStep {
 				if asrt, ok1 := assert.(map[string]interface{}); ok1 {
 					assertions = append(assertions, asrt)
+					if asrt["status"] == "FAIL" && !isfail {
+						isfail = true
+						_Status = "FAIL"
+						_Message = "One or more assertions failed, " + asrt["reason"].(string)
+					}
 				}
 			}
 		} else {

@@ -130,7 +130,7 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 	const steps = [] //##MULTI_STEPS 
 
 	export default function () {
-
+		let isfail = false
 		const pattern = /{{\$(\d+)\.(.*?)}}/g
 		const JSONPaths = {}
 		const stepsResponse = {}
@@ -138,7 +138,7 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 		for (const assert of asserts) {
 			_assertions[assert.type] = {
 				"type":   assert.type,
-				"reason": (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
+				"reason": assert.type.replace('_', ' ') + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
 				"actual": "N/A",
 				"status": 'FAIL',
 			}
@@ -216,7 +216,7 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 			)
 
 			stepsResponse[stepKey] = response.json()
-
+			
 			for (const assert of asserts) {
 				if (assert.type === 'status_code') {
 					const _op = assert.config.operator
@@ -251,6 +251,9 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 					if (sOk) {
 						_assertions[assert.type].status = "PASS"
 					} else {
+						isfail = true
+						_assertions[assert.type].status = "FAIL"
+						_assertions[assert.type].reason = "assert failed, " + assert.type.replace('_', '') + " didn't matched"
 						break
 					}
 				} else if (assert.type === 'response_time') {
@@ -268,10 +271,17 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 					if (sOk) {
 						_assertions[assert.type].status = "PASS"
 					} else {
+						isfail = true
+						_assertions[assert.type].status = "FAIL"
+						_assertions[assert.type].reason = "assert failed, " + assert.type.replace('_', '') + " didn't matched"
 						break
 					}
 				}
         	}
+
+			if (isfail) {
+				break
+			}
 		}
 		console.log('###START->', {steps: stepsResponse, assertions: _assertions}, '<-END###')
 	}
