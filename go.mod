@@ -8,6 +8,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gorilla/websocket v1.5.0
 	github.com/jhump/protoreflect v1.14.1
+	github.com/multiplay/go-cticker v0.0.0-20190411183326-bd2f021b1c08
 	github.com/prometheus-community/pro-bing v0.1.0
 	github.com/rs/zerolog v1.28.0
 	github.com/sirupsen/logrus v1.9.0
