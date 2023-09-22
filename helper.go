@@ -49,6 +49,8 @@ type SyntheticsExpectMeta struct {
 }
 
 type SyntheticsRequestOptions struct {
+	Topic                     string                  `json:"topic" default:"locations"`
+	Premise                   []string                `json:"premise"`
 	Environment               []interface{}           `json:"environment"`
 	TTL                       bool                    `json:"ttl"`
 	SslSignedCertificate      bool                    `json:"ssl_signed_certificate"`
@@ -73,6 +75,21 @@ type SyntheticsRequestOptions struct {
 	AlertConditions           AlertConditionsOptions  `json:"alert_conditions"`
 	Monitor                   MonitorOptions          `json:"monitor"`
 	CurrentAction             string                  `json:"current_action" default:"play"`
+	StepTestIndex             int                     `json:"step_test_index"`
+	HTTPMultiTest             bool                    `json:"http_multi_test"`
+	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
+}
+
+type HTTPMultiStepsOptions struct {
+	StepName string               `json:"step_name"`
+	Endpoint string               `json:"endpoint"`
+	Expect   SyntheticsExpectMeta `json:"expect"`
+	Request  struct {
+		HTTPMethod  string               `json:"http_method"`
+		HTTPVersion string               `json:"http_version"`
+		HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
+		HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
+	} `json:"request"`
 }
 
 type SyntheticsTags struct {
@@ -227,10 +244,11 @@ type AlertConditionsOptions struct {
 }
 
 type MonitorOptions struct {
-	Name                    []interface{} `json:"name"`
-	NotifyTeam              []interface{} `json:"notify_team"`
-	Content                 string        `json:"content"`
+	Source                  string        `json:"source"` // slack, email, webhook, etc
+	NotifyTo                []interface{} `json:"notify_to"`
 	Renotify                bool          `json:"renotify"`
 	RenotifyIntervalSeconds int           `json:"renotify_interval_seconds"`
 	Priority                string        `json:"priority"`
+	TriggerFailsCase        bool          `json:"trigger_fails_case"`
+	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
 }
