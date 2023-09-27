@@ -1,4 +1,4 @@
-package synthetics_agent
+package worker
 
 import (
 	"bytes"
@@ -6,10 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pcommon"
-	"go.opentelemetry.io/collector/pdata/pmetric"
-	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 	"io"
 	"net/http"
 	"os"
@@ -17,6 +13,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 )
 
 var _md map[string]*pmetric.Metrics = make(map[string]*pmetric.Metrics)
@@ -154,8 +155,11 @@ func exportClient() *http.Client {
 	return _eclient
 }
 
-func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string, timers map[string]float64, attrs pcommon.Map) {
-	testId := strconv.Itoa(c.Id) + "-" + os.Getenv("LOCATION") + "-" + strconv.Itoa(int(time.Now().UnixNano()))
+func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string,
+	timers map[string]float64, attrs pcommon.Map) {
+	testId := strconv.Itoa(c.Id) + "-" +
+		os.Getenv("LOCATION") + "-" +
+		strconv.Itoa(int(time.Now().UnixNano()))
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
 	rm := getResource(c)
