@@ -1,10 +1,11 @@
-package synthetics_agent
+package worker
 
 import (
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckHTTPMultiStepsRequest(c SyntheticsModelCustom) {
