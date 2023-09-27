@@ -1,4 +1,4 @@
-package synthetics_agent
+package worker
 
 import (
 	"crypto/md5"
@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"io"
 	"io/ioutil"
 	"math"
@@ -19,6 +18,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func buildHttpRequest(c SyntheticsModelCustom, client *http.Client, timers map[string]float64, digest bool) (error, *http.Request) {
@@ -87,7 +88,16 @@ func digestParts(resp *http.Response) map[string]string {
 	}
 	return result
 }
+
 func CheckHttpRequest(c SyntheticsModelCustom) {
+	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
+		CheckHTTPMultiStepsRequest(c)
+	} else {
+		CheckHttpSingleStepRequest(c)
+	}
+}
+
+func CheckHttpSingleStepRequest(c SyntheticsModelCustom) {
 	var _startConn time.Time
 	var _startDns time.Time
 	var _startConnect time.Time

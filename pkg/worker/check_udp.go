@@ -1,12 +1,13 @@
-package synthetics_agent
+package worker
 
 import (
 	"encoding/json"
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func CheckUdpRequest(c SyntheticsModelCustom) {

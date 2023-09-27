@@ -1,13 +1,14 @@
-package synthetics_agent
+package worker
 
 import (
-	log "github.com/sirupsen/logrus"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 var _checks map[string]*CheckState = map[string]*CheckState{}
@@ -16,6 +17,27 @@ type SyntheticsModelCustom struct {
 	Uid string
 	Not string
 	SyntheticsModel
+}
+
+type reqStatus string
+
+var (
+	reqStatusOK     reqStatus = "OK"
+	reqStatusFail   reqStatus = "FAIL"
+	reqStatusFailed reqStatus = "FAILED"
+	reqStatusError  reqStatus = "ERROR"
+)
+
+var protoCheckHandler = map[string]func(c SyntheticsModelCustom){
+	"http":       CheckHttpRequest,
+	"tcp":        CheckTcpRequest,
+	"dns":        CheckDnsRequest,
+	"ping":       CheckPingRequest,
+	"icmp":       CheckPingRequest,
+	"ssl":        CheckSslRequest,
+	"udp":        CheckUdpRequest,
+	"web_socket": CheckWsRequest,
+	"grpc":       CheckGrpcRequest,
 }
 
 func assertString(data string, assert CaseOptions) bool {
@@ -100,34 +122,12 @@ func (c SyntheticsModelCustom) fire() {
 		}
 	}
 
-	if c.Proto == "http" {
-		if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
-			CheckHTTPMultiStepsRequest(c)
-		} else {
-			CheckHttpRequest(c)
-		}
+	reqHandler, ok := protoCheckHandler[c.Proto]
+	if !ok {
+		return
 	}
-	if c.Proto == "tcp" {
-		CheckTcpRequest(c)
-	}
-	if c.Proto == "dns" {
-		CheckDnsRequest(c)
-	}
-	if c.Proto == "ping" || c.Proto == "icmp" {
-		CheckPingRequest(c)
-	}
-	if c.Proto == "ssl" {
-		CheckSslRequest(c)
-	}
-	if c.Proto == "udp" {
-		CheckUdpRequest(c)
-	}
-	if c.Proto == "web_socket" {
-		CheckWsRequest(c)
-	}
-	if c.Proto == "grpc" {
-		CheckGrpcRequest(c)
-	}
+
+	reqHandler(c)
 }
 
 type CheckState struct {

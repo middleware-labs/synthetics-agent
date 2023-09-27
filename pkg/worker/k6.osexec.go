@@ -1,4 +1,4 @@
-package synthetics_agent
+package worker
 
 import (
 	"encoding/json"

@@ -1,58 +1,105 @@
-package synthetics_agent
+package worker
 
 import (
 	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/middleware-labs/synthetics-agent/ws"
-
-	//"github.com/apache/pulsar-client-go/pulsar"
-	"os"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/middleware-labs/synthetics-agent/pkg/ws"
 )
 
-func RunSyntheticWorker(typ string, location string, token string) {
-	var topic string = ""
-	if typ == "location" {
-		topic = "location-" + strings.ToLower(location)
-	} else if typ == "agent" {
-		if location == "" {
-			topic = "agent-" + strings.ToLower(token)
-		} else {
-			topic = "agent-" + strings.ToLower(token) + "-" + fmt.Sprintf("%x", sha1.Sum([]byte(strings.ToLower(location))))
-		}
-	} else {
-		panic(fmt.Errorf("invalid type passed."))
-	}
-	go unsubscribeUpdates(topic, token)
+var messages map[string]*ws.Msg = make(map[string]*ws.Msg)
 
-	subscribeUpdates(topic, token)
+var (
+	errInvalidMode = errors.New("invalid mode passed")
+)
+
+type Mode uint16
+
+var (
+	ModeLocation Mode = 0
+	ModeAgent    Mode = 1
+)
+
+func (m Mode) String() string {
+	switch m {
+	case ModeLocation:
+		return "location"
+	case ModeAgent:
+		return "agent"
+	}
+
+	return "unknown"
 }
 
-func unsubscribeUpdates(topic string, token string) {
-	instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
-	consumerName := "unsubscribe-" + instanceId + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
+type Config struct {
+	Mode                Mode
+	Location            string
+	Hostname            string
+	PulsarHost          string
+	UnsubscribeEndpoint string
+	NCAPassword         string
+	Token               string
+}
 
-	consumer, err := GetPulsar().Consumer("persistent/public/default/"+topic+"-unsubscribe", consumerName, ws.Params{
+type Worker struct {
+	cfg          *Config
+	pulsarClient *ws.Client
+	topic        string
+}
+
+func New(cfg *Config) (*Worker, error) {
+	var topic string
+	switch cfg.Mode {
+	case ModeLocation:
+		topic = fmt.Sprintf("%s-%s", ModeLocation, strings.ToLower(cfg.Location))
+	case ModeAgent:
+		if cfg.Location == "" {
+			topic = fmt.Sprintf("%s-%s", ModeAgent, strings.ToLower(cfg.Token))
+		} else {
+			topic = fmt.Sprintf("%s-%s-%x", ModeAgent, strings.ToLower(cfg.Token),
+				sha1.Sum([]byte(strings.ToLower(cfg.Location))))
+		}
+	default:
+		return &Worker{}, errInvalidMode
+	}
+
+	return &Worker{
+		cfg:          cfg,
+		pulsarClient: ws.New(cfg.PulsarHost),
+		topic:        topic,
+	}, nil
+}
+
+func (w *Worker) Run() {
+	go w.UnsubscribeUpdates(w.topic, w.cfg.Token)
+	w.SubscribeUpdates(w.topic, w.cfg.Token)
+}
+
+func (w *Worker) UnsubscribeUpdates(topic string, token string) {
+	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
+	consumerName := "unsubscribe-" + w.cfg.Hostname + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
+
+	consumer, err := w.pulsarClient.Consumer("persistent/public/default/"+topic+"-unsubscribe", consumerName, ws.Params{
 		"subscriptionType": "Exclusive",
 		"consumerName":     consumerName,
 		"token":            token,
 	})
 
 	if err != nil {
-		log.Errorf("error while subscibing %v", err)
+		// log.Errorf("error while subscibing %v", err)
 		timer := time.NewTimer(time.Second * 5)
 		<-timer.C
-		unsubscribeUpdates(topic, token)
+		w.UnsubscribeUpdates(topic, token)
 		return
 	}
 
@@ -61,15 +108,15 @@ func unsubscribeUpdates(topic string, token string) {
 	for {
 		msg, err := consumer.Receive(ctx)
 		if err != nil {
-			log.Errorf("error while consume subscibing %v", err)
+			// log.Errorf("error while consume subscibing %v", err)
 			consumer.Close()
 
 			timer := time.NewTimer(time.Second * 5)
 			<-timer.C
-			unsubscribeUpdates(topic, token)
+			w.UnsubscribeUpdates(topic, token)
 			return
 		} else {
-			v := UnsubscribePayload{}
+			v := unsubscribePayload{}
 			//log.Printf("unsub payload str %s", string(msg.Payload))
 			err := json.Unmarshal(msg.Payload, &v)
 			//log.Printf("unsub payload %v", v)
@@ -80,7 +127,8 @@ func unsubscribeUpdates(topic string, token string) {
 				if err != nil {
 					log.Print("ack msg failed %v", err)
 				}
-				if v.Not != instanceId {
+
+				if v.Not != w.cfg.Hostname {
 					_, ok := messages[msg.Key]
 					if ok {
 						log.Printf("[%d] job revoked   key:%s  ", v.Id, msg.Key)
@@ -98,14 +146,15 @@ func unsubscribeUpdates(topic string, token string) {
 		}
 	}
 }
-func subscribeUpdates(topic string, token string) {
-	instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 
-	consumerName := "subscribe-" + instanceId + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
+func (w *Worker) SubscribeUpdates(topic string, token string) {
+	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 
-	log.Printf("URL: %s", os.Getenv("PULSAR_HOST")+"/consumer/persistent/public/default/"+topic+"/"+consumerName+"?token="+token)
+	consumerName := "subscribe-" + w.cfg.Hostname + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
 
-	consumer, err := GetPulsar().Consumer("persistent/public/default/"+topic, "subscribe", ws.Params{
+	log.Printf("URL: %s", w.cfg.Hostname+"/consumer/persistent/public/default/"+topic+"/"+consumerName+"?token="+token)
+
+	consumer, err := w.pulsarClient.Consumer("persistent/public/default/"+topic, "subscribe", ws.Params{
 		"subscriptionType":           "Key_Shared",
 		"ackTimeoutMillis":           "20000",
 		"consumerName":               consumerName,
@@ -116,10 +165,10 @@ func subscribeUpdates(topic string, token string) {
 	})
 
 	if err != nil {
-		log.Errorf("error while subscibing %v", err)
+		// log.Errorf("error while subscibing %v", err)
 		timer := time.NewTimer(time.Second * 5)
 		<-timer.C
-		subscribeUpdates(topic, token)
+		w.SubscribeUpdates(topic, token)
 		return
 	}
 
@@ -128,12 +177,12 @@ func subscribeUpdates(topic string, token string) {
 	for {
 		msg, err := consumer.Receive(ctx)
 		if err != nil {
-			log.Errorf("error while consume subscibing %v", err)
+			// log.Errorf("error while consume subscibing %v", err)
 			consumer.Close()
 
 			timer := time.NewTimer(time.Second * 5)
 			<-timer.C
-			subscribeUpdates(topic, token)
+			w.SubscribeUpdates(topic, token)
 			return
 		} else if msg.Payload == nil || len(msg.Payload) == 0 {
 			log.Print("[%s] null message recved", msg.MsgId)
@@ -160,7 +209,7 @@ func subscribeUpdates(topic string, token string) {
 						log.Printf("[%d] job update key:%s ", v.Id, msg.Key)
 						err := consumer.Ack(context.Background(), messages[msg.Key])
 						if err != nil {
-							log.Errorf("error while ack %v", err)
+							// log.Errorf("error while ack %v", err)
 						}
 					} else if !ok {
 						if v.Action == "update" {
@@ -190,8 +239,8 @@ func subscribeUpdates(topic string, token string) {
 						if !refresh {
 							if v.CheckTestRequest.URL == "" {
 								// let others subscriber unsuscribe...
-								produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, UnsubscribePayload{
-									Not:        instanceId,
+								w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
+									Not:        w.cfg.Hostname,
 									Action:     "unsub",
 									Id:         v.Id,
 									AccountUID: v.AccountUID,
@@ -217,35 +266,36 @@ func subscribeUpdates(topic string, token string) {
 	}
 }
 
-type UnsubscribePayload struct {
+type unsubscribePayload struct {
 	Not        string
 	Action     string
 	Id         int
 	AccountUID string
 }
 
-func produceMessage(accountUid string, topic string, key string, payload UnsubscribePayload) {
+func (w *Worker) produceMessage(accountUid string, topic string, key string, payload unsubscribePayload) {
 
-	type Payload struct {
+	type topicKeyPayload struct {
 		Topic   string
 		Key     string
-		Payload UnsubscribePayload
+		Payload unsubscribePayload
 	}
-	pay := Payload{
+
+	pay := topicKeyPayload{
 		Topic:   topic,
 		Key:     key,
 		Payload: payload,
 	}
 	str, _ := json.Marshal(pay)
 
-	url := strings.ReplaceAll(os.Getenv("UNSUBSCRIBE_ENDPOINT"), "{ACC}", accountUid)
+	url := strings.ReplaceAll(w.cfg.UnsubscribeEndpoint, "{ACC}", accountUid)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(str))
 	if err != nil {
 		log.Printf("produce message http failed. %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if os.Getenv("NCA_PASSWORD") != "" {
-		req.Header.Set("Authorization", os.Getenv("NCA_PASSWORD"))
+	if w.cfg.NCAPassword != "" {
+		req.Header.Set("Authorization", w.cfg.NCAPassword)
 	}
 
 	re, err := http.DefaultClient.Do(req)

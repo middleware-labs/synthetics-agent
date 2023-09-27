@@ -1,14 +1,15 @@
-package synthetics_agent
+package worker
 
 import (
 	"context"
 	"fmt"
-	"github.com/adakailabs/go-traceroute/traceroute"
-	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/collector/pdata/pcommon"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/adakailabs/go-traceroute/traceroute"
+	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 func traceRoute(ip net.IP, c SyntheticsModelCustom, timers map[string]float64, attrs pcommon.Map) string {

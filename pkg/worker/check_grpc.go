@@ -1,4 +1,4 @@
-package synthetics_agent
+package worker
 
 import (
 	"bytes"
@@ -7,6 +7,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/desc/protoparse"
@@ -22,10 +27,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
-	"io/ioutil"
-	"os"
-	"strings"
-	"time"
 )
 
 func buildCredentials(skipVerify bool, caCerts, clientCert, clientKey, serverName string) (credentials.TransportCredentials, error) {

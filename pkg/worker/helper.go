@@ -1,5 +1,5 @@
 // DO NOT EDIT.. COPY FROM bifrost/app/components/synthetics/helper.go
-package synthetics_agent
+package worker
 
 import (
 	"time"
