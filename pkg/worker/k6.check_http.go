@@ -6,23 +6,14 @@ import (
 	"time"
 )
 
-func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) {
+func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) testStatus {
 	start := time.Now()
-	var err error
-	err = errTestStatusOK{
-		msg: string(reqStatusOK),
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
-	status := reqStatusOK
-	// _Status := "OK"
-	// _Message := ""
-	// assertions := make([]map[string]interface{}, 0)
 
-	// attrs := pcommon.NewMap()
 	isCheckTestReq := c.CheckTestRequest.URL != ""
 	scriptSnippet := CreateScriptSnippet(c)
-
-	//fmt.Println("scriptSnippet-->", scriptSnippet)
-
 	respValue, exeErr := ExecK6Script(scriptSnippet)
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
@@ -31,21 +22,18 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 
 	if isCheckTestReq {
 		resSteps := response["steps"]
-		_testBody := map[string]interface{}{
+		checker.testBody = map[string]interface{}{
 			"multiStepPreview": true,
 			"body":             resSteps,
 		}
-		WebhookSendCheckRequest(c, _testBody)
-		return
+		// finishTestRequest(c, _testBody)
+		return testStatus
 	}
 
 	if exeErr != nil {
-		err = errTestStatusError{
-			msg: fmt.Sprintf("Error while executing script %v", exeErr.Error()),
-		}
-		status = reqStatusError
-		// _Status = "ERROR"
-		// _Message = fmt.Sprintf("Error while executing script %v", exeErr.Error())
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error while executing script %v", exeErr)
+
 		checker.assertions = append(checker.assertions, map[string]string{
 			"type":   "status_code",
 			"reason": "Error while executing script",
@@ -64,14 +52,10 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 			for _, assert := range assertStep {
 				if asrt, ok1 := assert.(map[string]string); ok1 {
 					checker.assertions = append(checker.assertions, asrt)
-					if asrt["status"] == "FAIL" && !isfail {
+					if asrt["status"] == testStatusFail && !isfail {
 						isfail = true
-						err = errTestStatusFail{
-							msg: "One or more assertions failed, " + asrt["reason"],
-						}
-						status = reqStatusFail
-						//_Status = "FAIL"
-						// _Message = "One or more assertions failed, " + asrt["reason"].(string)
+						testStatus.status = testStatusFail
+						testStatus.msg = "one or more assertions failed, " + asrt["reason"]
 					}
 				}
 			}
@@ -89,5 +73,6 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
-	FinishCheckRequest(c, string(status), err.Error(), checker.timers, checker.attrs)
+	// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
+	return testStatus
 }

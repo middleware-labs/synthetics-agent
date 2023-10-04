@@ -7,39 +7,97 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/adakailabs/go-traceroute/traceroute"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
-func traceRoute(ip net.IP, c SyntheticsModelCustom, timers map[string]float64, attrs pcommon.Map) string {
-	_start := time.Now()
-	t := &traceroute.Tracer{
+type traceRouteChecker struct {
+	ip      net.IP
+	timeout int
+	timers  map[string]float64
+	attrs   pcommon.Map
+	tracer  tracer
+	hops    []string
+}
+
+type tracer interface {
+	Trace(ctx context.Context, addr net.IP,
+		callback func(*traceroute.Reply)) error
+	Close()
+}
+
+func getDefaultTracer(timeout int) *traceroute.Tracer {
+	return &traceroute.Tracer{
 		Config: traceroute.Config{
 			Delay:    50 * time.Millisecond,
-			Timeout:  time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
+			Timeout:  time.Duration(timeout) * time.Second,
 			MaxHops:  100,
 			Count:    3,
 			Networks: []string{"ip4:icmp", "ip4:ip"},
 		},
 	}
-	defer t.Close()
-	hops := []string{}
+}
 
-	err := t.Trace(context.Background(), ip, func(reply *traceroute.Reply) {
+func newTraceRouteChecker(ip net.IP, timeout int,
+	timers map[string]float64, attrs pcommon.Map) protocolChecker {
+	return &traceRouteChecker{
+		ip:      ip,
+		timeout: timeout,
+		timers: map[string]float64{
+			"duration": 0,
+		},
+		attrs:  pcommon.NewMap(),
+		tracer: getDefaultTracer(timeout),
+		hops:   []string{},
+	}
+}
+
+func (checker *traceRouteChecker) close() {
+	checker.tracer.Close()
+}
+
+func (checker *traceRouteChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *traceRouteChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *traceRouteChecker) getTestBody() map[string]interface{} {
+	return map[string]interface{}{}
+}
+
+func (checker *traceRouteChecker) getDetails() map[string]float64 {
+	return map[string]float64{}
+}
+
+func (checker *traceRouteChecker) check() testStatus {
+	defer checker.close()
+	testStatus := testStatus{
+		status: testStatusOK,
+		msg:    "",
+	}
+	start := time.Now()
+	err := checker.tracer.Trace(context.Background(), checker.ip, func(reply *traceroute.Reply) {
 		text := fmt.Sprintf("hop %d. %v %v", reply.Hops, reply.IP, reply.RTT)
-		log.Printf(text)
-		hops = append(hops, text)
+		slog.Debug("traceroute: ", slog.String("trace", text))
+		checker.hops = append(checker.hops, text)
 	})
-	attrs.PutInt("hops.count", int64(len(hops)))
-	attrs.PutStr("hops", strings.Join(hops, "\n"))
-	timers["duration"] = timeInMs(time.Since(_start))
+
+	checker.attrs.PutInt("hops.count", int64(len(checker.hops)))
+	checker.attrs.PutStr("hops", strings.Join(checker.hops, "\n"))
+	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	if err != nil {
-		log.Printf("error ttl %v", err)
-		attrs.PutStr("hops.error", err.Error())
-		return fmt.Sprintf("traceroute error %v", err.Error())
+		slog.Error("traceroute error", slog.String("error", err.Error()))
+		checker.attrs.PutStr("hops.error", err.Error())
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("traceroute error %v", err.Error())
+		return testStatus
 	}
 
-	return ""
+	return testStatus
 }

@@ -2,7 +2,6 @@ package worker
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -17,6 +16,7 @@ type udpChecker struct {
 	testBody   map[string]interface{}
 	assertions []map[string]string
 	attrs      pcommon.Map
+	netHelper  udpNetHelper
 }
 
 const (
@@ -39,27 +39,24 @@ func newUDPChecker(c SyntheticsModelCustom) protocolChecker {
 		},
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
+		netHelper:  &defaultUDPNetHelper{},
 	}
 }
 
-func (checker *udpChecker) processUDPResponse(err error, received []byte, start time.Time) {
-	checker.timers["duration"] = timeInMs(time.Since(start))
+func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received []byte) {
 	c := checker.c
 	udpStatus := udpStatusSuccessful
-	status := reqStatusOK
-
-	if errors.As(err, &errTestStatusError{}) {
-		status = reqStatusError
-	} else if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
+	if testStatus.status != testStatusOK {
+		udpStatus = udpStatusFailed
 	}
 
 	isTestReq := c.CheckTestRequest.URL != ""
 	if !isTestReq {
+
 		for _, assert := range c.Request.Assertions.UDP.Cases {
 			// do not process assertions if status of any (previous)
 			// assertion is not OK
-			if status != reqStatusOK {
+			if testStatus.status != testStatusOK {
 				break
 			}
 
@@ -72,31 +69,24 @@ func (checker *udpChecker) processUDPResponse(err error, received []byte, start 
 				ck["actual"] = fmt.Sprintf("%v", dur)
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 					" " + fmt.Sprintf("%v", assert.Config.Value)
-				ck["status"] = string(reqStatusOK)
+				ck["status"] = testStatusOK
 
 				if !assertInt(int64(dur), assert) {
-					ck["status"] = string(reqStatusFail)
-					udpStatus = udpStatusFailed
-					status = reqStatusFail
-					err = errTestStatusFail{
-						msg: "assert failed, response_time didn't matched",
-					}
+					ck["status"] = testStatusFail
+					testStatus.status = testStatusFail
+					testStatus.msg = "assert failed, response_time didn't matched"
 				}
 
 			case "receive_message":
 				ck["actual"] = "Matched"
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 					" " + assert.Config.Value
-				ck["status"] = string(reqStatusOK)
-
+				ck["status"] = testStatusOK
 				if !assertString(string(received), assert) {
-					ck["status"] = string(reqStatusFail)
+					ck["status"] = testStatusFail
 					ck["actual"] = "Not Matched"
-					status = reqStatusFail
-					udpStatus = udpStatusFailed
-					err = errTestStatusFail{
-						msg: "assert failed, response message didn't matched",
-					}
+					testStatus.status = testStatusFail
+					testStatus.msg = "assert failed, response message didn't matched"
 				}
 			}
 
@@ -106,7 +96,7 @@ func (checker *udpChecker) processUDPResponse(err error, received []byte, start 
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 
-		FinishCheckRequest(c, string(status), err.Error(), checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -124,105 +114,138 @@ func (checker *udpChecker) processUDPResponse(err error, received []byte, start 
 	testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
 	testBody["udp_status"] = udpStatus
 
-	WebhookSendCheckRequest(c, testBody)
+	// finishTestRequest(c, testBody)
 
 }
 
-func (checker *udpChecker) resolveUDPAddr(endpoint string) (*net.UDPAddr, error) {
-	var newErr error
+type udpNetHelper interface {
+	resolveUDPAddr(endpoint string) (*net.UDPAddr, error)
+	dialUDP(addr *net.UDPAddr) (*net.UDPConn, error)
+	writeUDPMessage(conn *net.UDPConn, b []byte) error
+	readUDPMessage(conn *net.UDPConn, b []byte) error
+	setUDPReadDeadline(conn *net.UDPConn, t time.Time) error
+}
+
+type defaultUDPNetHelper struct{}
+
+func (*defaultUDPNetHelper) resolveUDPAddr(endpoint string) (*net.UDPAddr, error) {
 	addr, err := net.ResolveUDPAddr("udp", endpoint)
 	if err != nil {
-		newErr = errTestStatusFail{
-			msg: fmt.Sprintf("error resolving dns %v", err),
-		}
-
-		return nil, newErr
+		return nil, err
 	}
 
 	return addr, nil
 }
 
-func (checker *udpChecker) dialUDP(addr *net.UDPAddr, start time.Time) (*net.UDPConn, error) {
-	checker.timers["dns"] = timeInMs(time.Since(start))
+func (*defaultUDPNetHelper) dialUDP(addr *net.UDPAddr) (*net.UDPConn, error) {
 	conn, udpErr := net.DialUDP("udp", nil, addr)
 	if udpErr != nil {
-		println("Listen failed:", udpErr.Error())
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("error connecting udp: %v", udpErr),
-		}
-		return nil, newErr
+		return nil, udpErr
 	}
 
 	return conn, nil
 }
 
-func (checker *udpChecker) writeUDPMessage(conn *net.UDPConn, start time.Time, b []byte) error {
-	checker.timers["dial"] = timeInMs(time.Since(start))
+func (*defaultUDPNetHelper) writeUDPMessage(conn *net.UDPConn, b []byte) error {
 	_, err := conn.Write(b)
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("udp write message failed, %v", err.Error()),
-		}
-		return newErr
+		return err
 	}
 
 	return nil
 }
 
-func (checker *udpChecker) setReadDeadline(conn *net.UDPConn, t time.Time) error {
+func (*defaultUDPNetHelper) readUDPMessage(conn *net.UDPConn, b []byte) error {
+	_, err := conn.Read(b)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (*defaultUDPNetHelper) setUDPReadDeadline(conn *net.UDPConn, t time.Time) error {
 	err := conn.SetReadDeadline(t)
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("conn SetReadDeadline failed, %v", err.Error()),
-		}
-
-		return newErr
+		return err
 	}
 
 	return nil
 }
 
-func (checker *udpChecker) check() error {
-	var newErr error
+func (checker *udpChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 
 	received := make([]byte, 1024)
-	addr, err := checker.resolveUDPAddr(c.Endpoint + ":" + c.Request.Port)
+	addr, err := checker.netHelper.resolveUDPAddr(c.Endpoint + ":" + c.Request.Port)
 	if err != nil {
-		checker.processUDPResponse(err, received, start)
-		return err
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error resolving dns: %v", err)
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.processUDPResponse(&testStatus, received)
+		return testStatus
 	}
 
 	start = time.Now()
-	conn, err := checker.dialUDP(addr, start)
+	checker.timers["dns"] = timeInMs(time.Since(start))
+	conn, err := checker.netHelper.dialUDP(addr)
 	if err != nil {
-		checker.processUDPResponse(err, received, start)
-		return err
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error connecting udp: %v", err)
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.processUDPResponse(&testStatus, received)
+		return testStatus
 	}
 
 	defer conn.Close()
 
-	err = checker.writeUDPMessage(conn, start, []byte(c.Request.UDPPayload.Message))
+	checker.timers["dial"] = timeInMs(time.Since(start))
+	err = checker.netHelper.writeUDPMessage(conn, []byte(c.Request.UDPPayload.Message))
 	if err != nil {
-		checker.processUDPResponse(err, received, start)
-		return err
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("udp write message failed: %v", err.Error())
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.processUDPResponse(&testStatus, received)
+		return testStatus
 	}
 
 	deadline := time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second)
-	err = checker.setReadDeadline(conn, deadline)
+	err = checker.netHelper.setUDPReadDeadline(conn, deadline)
 	if err != nil {
-		checker.processUDPResponse(err, received, start)
-		return err
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("conn SetUDPReadDeadline failed: %v", err.Error())
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.processUDPResponse(&testStatus, received)
+		return testStatus
 	}
 
-	_, err = conn.Read(received)
+	err = checker.netHelper.readUDPMessage(conn, received)
 	if err != nil {
-		err = errTestStatusFail{
-			msg: fmt.Sprintf("error reading message, %v", err.Error()),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error reading message: %v", err.Error())
 	}
 
-	checker.processUDPResponse(err, received, start)
-	return newErr
+	checker.timers["duration"] = timeInMs(time.Since(start))
+	checker.processUDPResponse(&testStatus, received)
+	return testStatus
+}
+
+func (checker *udpChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *udpChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *udpChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *udpChecker) getDetails() map[string]float64 {
+	return nil
 }

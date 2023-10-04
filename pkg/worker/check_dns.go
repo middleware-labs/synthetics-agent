@@ -110,6 +110,17 @@ func lookupMX(ctx context.Context, endpoint string,
 		hosts = append(hosts, v.Host)
 	}
 
+	// This was not there in the old code. Adding it here and
+	// commenting it out. Why are assertions not needed for MX records?
+	/*asr = map[string]interface{}{
+		"type": assertTypeDNSAtLeastOneRecord,
+		"config": map[string]string{
+			"operator": "is",
+			"value":    mx[0].Host,
+			"target":   "of_type_mx",
+		},
+	}*/
+
 	return hosts, asr, nil
 }
 
@@ -176,154 +187,156 @@ func newDNSChecker(c SyntheticsModelCustom) protocolChecker {
 	}
 }
 
-func (checker *dnsChecker) processDNSResponse(err error, ips []net.IP) {
-
+func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 	c := checker.c
-	status := reqStatusOK
-	if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
+
 	ctx := context.Background()
+	for _, assert := range c.Request.Assertions.DNS.Cases {
 
-	// isTestReq is true if the request is a test request
-	isTestReq := checker.c.CheckTestRequest.URL != ""
-	if !isTestReq {
-		for _, assert := range c.Request.Assertions.DNS.Cases {
-
-			if status == reqStatusFail {
-				checker.assertions = append(checker.assertions, map[string]string{
-					"type":   assert.Type,
-					"reason": err.Error(),
-					"actual": "N/A",
-					"status": string(reqStatusFail),
-				})
-				continue
-			}
-
-			switch assert.Type {
-			case assertTypeDNSResponseTime:
-				ck := make(map[string]string)
-				ck["type"] = assert.Type
-				ck["status"] = string(reqStatusOK)
-				ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
-				ck["reason"] = "response time assertion passed"
-				if !assertInt(int64(checker.timers["duration"]), assert) {
-					ck["status"] = string(reqStatusFail)
-					ck["reason"] = "response time assertion failed"
-				}
-				ck["status"] = string(reqStatusOK)
-				checker.assertions = append(checker.assertions, ck)
-
-			case assertTypeDNSEveryAvailableRecord:
-				fallthrough
-			case assertTypeDNSAtLeastOneRecord:
-				records := make([]string, 0)
-
-				ck := make(map[string]string)
-				ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
-					" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
-				ck["status"] = string(reqStatusOK)
-
-				switch assert.Config.Target {
-				case "of_type_a":
-					for _, v := range ips {
-						if len(v) == net.IPv4len {
-							records = append(records, v.String())
-						}
-					}
-				case "of_type_aaaa":
-					for _, v := range ips {
-						if len(v) == net.IPv6len {
-							records = append(records, v.String())
-						}
-					}
-				case "of_type_cname":
-					cnames, _, err := lookupCNAME(ctx, c.Endpoint, checker.resolver)
-					if err != nil {
-						ck["reason"] = "Error while looking up CNAME record"
-						ck["status"] = string(reqStatusFail)
-						ck["actual"] = fmt.Sprintf("%v", err)
-					} else {
-						records = append(records, cnames...)
-					}
-				case "of_type_mx":
-					mxHosts, _, err := lookupMX(ctx, c.Endpoint, checker.resolver)
-					if err != nil {
-						ck["reason"] = "Error while resolving MX record"
-						ck["status"] = string(reqStatusFail)
-						ck["actual"] = fmt.Sprintf("%v", err)
-					} else {
-						records = append(records, mxHosts...)
-					}
-				case "of_type_ns":
-					nsHosts, _, err := lookupNS(ctx, c.Endpoint, checker.resolver)
-					if err != nil {
-						ck["reason"] = "Error while looking up NS record"
-						ck["status"] = string(reqStatusFail)
-						ck["actual"] = fmt.Sprintf("%v", err)
-					} else {
-						records = append(records, nsHosts...)
-					}
-				case "of_type_txt":
-					txtHosts, _, err := lookupTXT(ctx, c.Endpoint, checker.resolver)
-					if err != nil {
-						ck["status"] = string(reqStatusFail)
-						ck["reason"] = "Error while looking up TXT record"
-						ck["actual"] = fmt.Sprintf("%v", err)
-					} else {
-						records = append(records, txtHosts...)
-					}
-				}
-
-				every := assert.Type == assertTypeDNSEveryAvailableRecord
-				match := false
-
-				if len(records) > 0 {
-					pass := true
-					for _, rec := range records {
-						if !assertString(rec, assert) {
-							pass = false
-							if every {
-								break
-								//FinishCheckRequest(c, "FAIL", "ip a record match failed with "+rec, timers, attrs)
-								//return
-							}
-							match = true
-							break
-						}
-					}
-
-					if ck["actual"] == "" {
-						ck["actual"] = strings.Join(records, ",")
-					}
-
-					if pass {
-						ck["status"] = string(reqStatusOK)
-						ck["actual"] = strings.Join(records, ",")
-					} else {
-						ck["status"] = string(reqStatusFail)
-						if ck["reason"] == "" {
-							ck["reason"] = "assertion failed"
-						}
-						err = errTestStatusFail{
-							msg: "assertion failed with " + strings.Join(records, ","),
-						}
-					}
-				}
-
-				if !every && !match {
-					err = errTestStatusFail{
-						msg: "no record matched with given condition " + strings.Join(records, ","),
-					}
-				}
-			}
+		if testStatus.status == testStatusFail {
+			checker.assertions = append(checker.assertions, map[string]string{
+				"type":   assert.Type,
+				"reason": testStatus.msg,
+				"actual": "N/A",
+				"status": testStatusFail,
+			})
+			continue
 		}
 
+		switch assert.Type {
+		case assertTypeDNSResponseTime:
+			ck := make(map[string]string)
+			ck["type"] = assert.Type
+			ck["status"] = testStatusOK
+			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
+			ck["reason"] = "response time assertion passed"
+			if !assertInt(int64(checker.timers["duration"]), assert) {
+				ck["status"] = testStatusFail
+				ck["reason"] = "response time assertion failed"
+			}
+			ck["status"] = testStatusOK
+			checker.assertions = append(checker.assertions, ck)
+
+		case assertTypeDNSEveryAvailableRecord:
+			fallthrough
+		case assertTypeDNSAtLeastOneRecord:
+			records := make([]string, 0)
+
+			ck := make(map[string]string)
+			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
+				" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
+			ck["status"] = testStatusOK
+
+			switch assert.Config.Target {
+			case "of_type_a":
+				for _, v := range ips {
+					if len(v) == net.IPv4len {
+						records = append(records, v.String())
+					}
+				}
+			case "of_type_aaaa":
+				for _, v := range ips {
+					if len(v) == net.IPv6len {
+						records = append(records, v.String())
+					}
+				}
+			case "of_type_cname":
+				cnames, _, err := lookupCNAME(ctx, c.Endpoint, checker.resolver)
+				if err != nil {
+					ck["reason"] = "Error while looking up CNAME record"
+					ck["status"] = testStatusFail
+					ck["actual"] = fmt.Sprintf("%v", err)
+				} else {
+					records = append(records, cnames...)
+				}
+			case "of_type_mx":
+				mxHosts, _, err := lookupMX(ctx, c.Endpoint, checker.resolver)
+				if err != nil {
+					ck["reason"] = "Error while resolving MX record"
+					ck["status"] = testStatusFail
+					ck["actual"] = fmt.Sprintf("%v", err)
+				} else {
+					records = append(records, mxHosts...)
+				}
+			case "of_type_ns":
+				nsHosts, _, err := lookupNS(ctx, c.Endpoint, checker.resolver)
+				if err != nil {
+					ck["reason"] = "Error while looking up NS record"
+					ck["status"] = testStatusFail
+					ck["actual"] = fmt.Sprintf("%v", err)
+				} else {
+					records = append(records, nsHosts...)
+				}
+			case "of_type_txt":
+				txtHosts, _, err := lookupTXT(ctx, c.Endpoint, checker.resolver)
+				if err != nil {
+					ck["status"] = testStatusFail
+					ck["reason"] = "Error while looking up TXT record"
+					ck["actual"] = fmt.Sprintf("%v", err)
+				} else {
+					records = append(records, txtHosts...)
+				}
+			}
+
+			every := assert.Type == assertTypeDNSEveryAvailableRecord
+			match := false
+
+			if len(records) > 0 {
+				pass := true
+				for _, rec := range records {
+					if !assertString(rec, assert) {
+						pass = false
+						if every {
+							break
+							//finishCheckRequest(c, "FAIL", "ip a record match failed with "+rec, timers, attrs)
+							//return
+						}
+						match = true
+						break
+					}
+				}
+
+				if ck["actual"] == "" {
+					ck["actual"] = strings.Join(records, ",")
+				}
+
+				if pass {
+					ck["status"] = testStatusOK
+					ck["actual"] = strings.Join(records, ",")
+				} else {
+					ck["status"] = testStatusFail
+					if ck["reason"] == "" {
+						ck["reason"] = "assertion failed"
+					}
+
+					testStatus.status = testStatusFail
+					testStatus.msg = "assertion failed with " + strings.Join(records, ",")
+				}
+			}
+
+			if !every && !match {
+				testStatus.status = testStatusFail
+				testStatus.msg = "no record matched with given condition " + strings.Join(records, ",")
+			}
+		}
+	}
+	return testStatus
+}
+func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
+
+	c := checker.c
+	ctx := context.Background()
+
+	isTestReq := checker.c.CheckTestRequest.URL != ""
+	if !isTestReq {
+		testStatus = checker.fillAssertions(ips)
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 
-		FinishCheckRequest(c, string(status), err.Error(),
-			checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -382,26 +395,26 @@ func (checker *dnsChecker) processDNSResponse(err error, ips []net.IP) {
 	testBody["headers"] = checker.lookup
 	testBody["assertions"] = asr
 	testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	WebhookSendCheckRequest(c, testBody)
+	// finishTestRequest(c, testBody)
 }
 
-func (checker *dnsChecker) check() error {
+func (checker *dnsChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
-	newErr := errTestStatusOK{
-		msg: string(reqStatusOK),
+	testStatus := testStatus{
+		status: testStatusOK,
+		msg:    "",
 	}
+
 	ctx := context.Background()
 
 	ips, err := checker.resolver.LookupIP(ctx, "ip", c.Endpoint)
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("error resolving dns: %v", err),
-		}
-
+		testStatus.status = testStatusFail
+		testStatus.msg = fmt.Sprintf("error resolving dns: %v", err)
 		checker.timers["duration"] = timeInMs(time.Since(start))
-		checker.processDNSResponse(newErr, ips)
-		return newErr
+		checker.processDNSResponse(testStatus, ips)
+		return testStatus
 	}
 
 	ipss := []string{}
@@ -411,5 +424,21 @@ func (checker *dnsChecker) check() error {
 	checker.attrs.PutStr("resolve.ips", strings.Join(ipss, "\n"))
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
-	return newErr
+	return testStatus
+}
+
+func (checker *dnsChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *dnsChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *dnsChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *dnsChecker) getDetails() map[string]float64 {
+	return nil
 }

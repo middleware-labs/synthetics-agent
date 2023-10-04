@@ -6,15 +6,15 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"github.com/gorilla/websocket"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
@@ -55,7 +55,8 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 	c := checker.c
 	roots, rtErr := x509.SystemCertPool()
 	if rtErr != nil {
-		log.Printf("root certificates error  %v", rtErr)
+		slog.Error("root certificates error", slog.String("error", rtErr.Error()))
+		return nil
 	}
 	netDialer := &net.Dialer{
 		Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
@@ -101,11 +102,10 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 }
 
 func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
-	recMsg string) error {
+	recMsg string) testStatus {
 	c := checker.c
-	var err error
-	err = errTestStatusOK{
-		msg: "OK",
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
 
 	for _, assert := range c.Request.Assertions.WebSocket.Cases {
@@ -116,12 +116,12 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + fmt.Sprintf("%v", assert.Config.Value)
 			if !assertInt(int64(checker.timers["duration"]), assert) {
-				ck["status"] = string(reqStatusFail)
-				err = errTestStatusFail{
-					msg: "response time not matched with the condition",
-				}
+				testStatus.status = testStatusFail
+				testStatus.msg = "response time not matched with the condition"
+				ck["status"] = testStatus.status
+				ck["reason"] = testStatus.msg
 			} else {
-				ck["status"] = string(reqStatusPass)
+				ck["status"] = testStatusPass
 				ck["reason"] = "response time matched with the condition"
 			}
 			checker.assertions = append(checker.assertions, ck)
@@ -129,47 +129,46 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			ck["actual"] = recMsg
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
 			if !assertString(recMsg, assert) {
-				ck["status"] = string(reqStatusFail)
-				err = errTestStatusFail{
-					msg: "received message not matched with the condition",
-				}
+				testStatus.status = testStatusFail
+				testStatus.msg = "received message not matched with the condition"
+
+				ck["status"] = testStatus.status
+				ck["reason"] = testStatus.msg
 			} else {
-				ck["status"] = string(reqStatusPass)
+				ck["status"] = testStatusPass
 			}
 			checker.assertions = append(checker.assertions, ck)
-			break
+
 		case "header":
 			if httpResp != nil && len(httpResp.Header) > 0 {
 				vl := httpResp.Header.Get(assert.Config.Target)
 				ck["actual"] = vl
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
 				if !assertString(vl, assert) {
-					ck["status"] = string(reqStatusFail)
-					err = errTestStatusFail{
-						msg: "response header didn't matched with the condition",
-					}
+					testStatus.status = testStatusFail
+					testStatus.msg = "response header didn't matched with the condition"
+					ck["status"] = testStatus.status
+					ck["reason"] = testStatus.msg
 				} else {
-					ck["status"] = string(reqStatusPass)
+					ck["status"] = testStatusPass
 				}
 			} else {
-				ck["status"] = string(reqStatusFail)
+				testStatus.status = testStatusFail
+				testStatus.msg = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
+				ck["status"] = testStatus.status
 				ck["actual"] = "No Header"
-				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
-				err = errTestStatusFail{
-					msg: "response header didn't matched with the condition",
-				}
+				ck["reason"] = testStatus.msg
 			}
 			checker.assertions = append(checker.assertions, ck)
 		}
 	}
 
-	return err
+	return testStatus
 }
 
-func (checker *wsChecker) processWSResonse(err error, httpResp *http.Response,
+func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http.Response,
 	recMsg string) {
 	c := checker.c
-	status := reqStatusOK
 
 	if httpResp != nil && len(httpResp.Header) > 0 {
 		checker.testBody["req_conn"] = httpResp.Header.Get("Connection")
@@ -182,18 +181,11 @@ func (checker *wsChecker) processWSResonse(err error, httpResp *http.Response,
 		checker.testBody["headers"] = headers
 	}
 
-	if errors.As(err, &errTestStatusError{}) {
-		status = reqStatusError
-	} else if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
-	}
-
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 
-		FinishCheckRequest(c, string(status), err.Error(),
-			checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -215,13 +207,16 @@ func (checker *wsChecker) processWSResonse(err error, httpResp *http.Response,
 
 	checker.testBody["assertions"] = assertions
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	WebhookSendCheckRequest(c, checker.testBody)
+	// finishTestRequest(c, checker.testBody)
 
 }
 
-func (checker *wsChecker) check() error {
+func (checker *wsChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 
 	wsDialer := checker.getWSDialer()
 
@@ -242,12 +237,11 @@ func (checker *wsChecker) check() error {
 
 	if err != nil {
 		checker.timers["duration"] = timeInMs(time.Since(start))
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("failed to connect websocket, %v", err.Error()),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("failed to connect websocket, %v", err)
 
-		checker.processWSResonse(newErr, httpResp, "")
-		return newErr
+		checker.processWSResonse(testStatus, httpResp, "")
+		return testStatus
 	}
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
@@ -255,31 +249,29 @@ func (checker *wsChecker) check() error {
 
 	err = conn.SetWriteDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second))
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("failed to set WriteDeadline, %v", err.Error()),
-		}
-		checker.processWSResonse(newErr, httpResp, "")
-		return newErr
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("failed to set WriteDeadline, %v", err)
+		checker.processWSResonse(testStatus, httpResp, "")
+		return testStatus
 
 	}
 
 	err = conn.SetReadDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second))
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("failed to set ReadDeadline, %v", err.Error()),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("failed to set ReadDeadline, %v", err)
 
-		checker.processWSResonse(newErr, httpResp, "")
-		return newErr
+		checker.processWSResonse(testStatus, httpResp, "")
+		return testStatus
 	}
 
 	err = conn.WriteMessage(websocket.TextMessage, []byte(c.Request.HTTPPayload.RequestBody.Content))
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("write message to ws failed, %v", err.Error()),
-		}
-		checker.processWSResonse(newErr, httpResp, "")
-		return newErr
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("write message to ws failed, %v", err.Error())
+
+		checker.processWSResonse(testStatus, httpResp, "")
+		return testStatus
 	}
 
 	checker.timers["ws.write_message"] = timeInMs(time.Since(start))
@@ -287,12 +279,11 @@ func (checker *wsChecker) check() error {
 
 	msgType, msg, mErr := conn.ReadMessage()
 	if mErr != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("read message failed, %v", mErr.Error()),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("read message failed, %v", mErr.Error())
 
-		checker.processWSResonse(newErr, httpResp, "")
-		return newErr
+		checker.processWSResonse(testStatus, httpResp, "")
+		return testStatus
 	}
 
 	checker.timers["ws.read_message"] = timeInMs(time.Since(start))
@@ -300,5 +291,21 @@ func (checker *wsChecker) check() error {
 	checker.attrs.PutInt("ws.message_length", int64(len(msg)))
 	checker.testBody["received_message"] = string(msg)
 
+	return testStatus
+}
+
+func (checker *wsChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *wsChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *wsChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *wsChecker) getDetails() map[string]float64 {
 	return nil
 }

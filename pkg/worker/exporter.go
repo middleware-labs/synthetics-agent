@@ -8,55 +8,56 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log/slog"
+
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
 )
 
 var _md map[string]*pmetric.Metrics = make(map[string]*pmetric.Metrics)
+
 var _exportTimer func()
 
 var syn = sync.Mutex{}
 
-func getResource(c SyntheticsModelCustom) pmetric.ResourceMetrics {
+func (cs *CheckState) getResourceMetrics() pmetric.ResourceMetrics {
 	syn.Lock()
 	defer syn.Unlock()
-
+	check := cs.check
 	if _exportTimer == nil {
 		_exportTimer = TimerNew(func() {
-			exportMetrics()
+			cs.exportMetrics()
 		}, 5*time.Second, 5*time.Second)
 	}
 
-	if _md[c.AccountUID] == nil {
+	if _md[check.AccountUID] == nil {
 		pm := pmetric.NewMetrics()
-		_md[c.AccountUID] = &pm
+		_md[check.AccountUID] = &pm
 	}
-	pm := _md[c.AccountUID]
+	pm := _md[check.AccountUID]
 	for i := 0; i < pm.ResourceMetrics().Len(); i++ {
 		rm := pm.ResourceMetrics().At(i)
 		val, ok := rm.Resource().Attributes().Get("check.check_id")
-		if ok && val.Int() == int64(c.Id) {
+		if ok && val.Int() == int64(check.Id) {
 			return rm
 		}
 	}
 	rm := pm.ResourceMetrics().AppendEmpty()
 	rm.Resource().Attributes().PutStr("check.agent", "check-agent")
 	rm.Resource().Attributes().PutStr("check.version", "1")
-	rm.Resource().Attributes().PutStr("check.protocol", c.Proto)
-	rm.Resource().Attributes().PutStr("mw.account_key", c.AccountKey)
-	rm.Resource().Attributes().PutInt("check.check_id", int64(c.Id))
+	rm.Resource().Attributes().PutStr("check.protocol", check.Proto)
+	rm.Resource().Attributes().PutStr("mw.account_key", check.AccountKey)
+	rm.Resource().Attributes().PutInt("check.check_id", int64(check.Id))
 	return rm
 }
 
-func exportMetrics() {
+func (cs *CheckState) exportMetrics() {
 	syn.Lock()
 	all := _md
 	_md = make(map[string]*pmetric.Metrics)
@@ -85,7 +86,7 @@ func exportMetrics() {
 
 		wg.Add(1)
 		go func(account string, tr pmetricotlp.ExportRequest) {
-			exportProtoRequest(account, tr)
+			cs.exportProtoRequest(account, tr)
 			wg.Done()
 		}(account, tr)
 		///log.Printf("exporting ", resources, scopes, metrics, account)
@@ -96,42 +97,50 @@ func exportMetrics() {
 	//log.Printf("export job(%d) fininished in %s but requests in %s", len(all), re, time.Since(start_export).String())
 }
 
-func exportProtoRequest(account string, tr pmetricotlp.ExportRequest) {
+func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRequest) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("error exporting account (%s) metrics %v %v", account, r, tr)
+			slog.Info("Recovered in f", slog.Any("r", r),
+				slog.String("account", account),
+				slog.String("tr", fmt.Sprintf("%v", tr)))
 		}
 	}()
 	request, err := tr.MarshalProto()
 	if err != nil {
-		log.Printf("error with proto %v", err)
-	} else {
-		start := time.Now()
-		endpoint := strings.ReplaceAll(os.Getenv("CAPTURE_ENDPOINT"), "{ACC}", account)
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(request))
-		if err != nil {
-			log.Errorf("error while exporting metrics %v", err)
-			return
-		}
-		req.Header.Set("Content-Type", "application/x-protobuf")
-		req.Header.Set("User-Agent", "ncheck-agent")
-
-		resp, err := exportClient().Do(req)
-		if err != nil {
-			log.Errorf("[Dur: %s] failed to make an HTTP request: %v", time.Since(start).String(), err)
-		} else {
-			if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
-				// Request is successful.
-				body, err := io.ReadAll(resp.Body)
-				if err != nil {
-					log.Errorf("error reading body %v", err)
-				}
-				log.Errorf("[Dur: %s] error exporting items, request to %s responded with HTTP Status Code %d\n\n%s\n\n", time.Since(start).String(), endpoint, resp.StatusCode, string(body))
-			} else {
-				//log.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
-			}
-		}
+		slog.Error("error with proto", slog.String("error", err.Error()))
+		return
 	}
+	start := time.Now()
+	endpoint := strings.ReplaceAll(cs.captureEndpoint, "{ACC}", account)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(request))
+	if err != nil {
+		slog.Error("error while exporting metrics", slog.String("error", err.Error()))
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-protobuf")
+	req.Header.Set("User-Agent", "ncheck-agent")
+
+	resp, err := exportClient().Do(req)
+	if err != nil {
+		slog.Error("error while exporting metrics", slog.String("duration",
+			time.Since(start).String()), slog.String("error", err.Error()))
+		return
+	}
+	if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
+		// Request is successful.
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			slog.Error("error reading body",
+				slog.String("error", err.Error()))
+
+		}
+		slog.Error("error exporting items", slog.String("duration", time.Since(start).String()),
+			slog.String("endpoint", endpoint),
+			slog.Int("status", resp.StatusCode), slog.String("body", string(body)))
+		return
+	}
+	//slog.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
+
 }
 
 var _eclient *http.Client
@@ -155,14 +164,15 @@ func exportClient() *http.Client {
 	return _eclient
 }
 
-func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string,
+func (cs CheckState) finishCheckRequest(testStatus testStatus,
 	timers map[string]float64, attrs pcommon.Map) {
-	testId := strconv.Itoa(c.Id) + "-" +
-		os.Getenv("LOCATION") + "-" +
+	check := cs.check
+	testId := strconv.Itoa(check.Id) + "-" +
+		cs.location + "-" +
 		strconv.Itoa(int(time.Now().UnixNano()))
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
-	rm := getResource(c)
+	rm := cs.getResourceMetrics()
 	ils := rm.ScopeMetrics().AppendEmpty()
 	ils.Scope().SetName("check")
 	ils.Scope().SetVersion("1")
@@ -181,12 +191,12 @@ func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string,
 		dp.SetTimestamp(pcommon.Timestamp(time.Now().UnixNano()))
 		dp.SetDoubleValue(value)
 
-		attrs.PutStr("check.id", strconv.Itoa(c.Id))
+		attrs.PutStr("check.id", strconv.Itoa(check.Id))
 		attrs.PutStr("check.test_id", testId)
-		attrs.PutStr("check.status", status)
-		attrs.PutStr("check.location", os.Getenv("LOCATION"))
-		if status != "OK" {
-			attrs.PutStr("check.error", errstr)
+		attrs.PutStr("check.status", testStatus.status)
+		attrs.PutStr("check.location", cs.location)
+		if testStatus.status != testStatusOK {
+			attrs.PutStr("check.error", testStatus.msg)
 		}
 
 		attrs.CopyTo(dp.Attributes())
@@ -195,11 +205,11 @@ func FinishCheckRequest(c SyntheticsModelCustom, status string, errstr string,
 	}
 }
 
-func WebhookSendCheckRequest(c SyntheticsModelCustom, opts map[string]interface{}) {
+func (cs CheckState) finishTestRequest(opts map[string]interface{}) {
 	go func() {
-		log.Println("Calling WebhookSendCheckRequest")
+		c := cs.check
 		if c.CheckTestRequest.URL != "" {
-			_, _ = MakeRequest(RequestOptions{
+			_, _ = makeRequest(RequestOptions{
 				URL:     c.CheckTestRequest.URL,
 				Headers: c.CheckTestRequest.Headers,
 				Method:  "POST",
@@ -216,7 +226,7 @@ type RequestOptions struct {
 	Body    map[string]interface{}
 }
 
-func MakeRequest(r RequestOptions) (string, error) {
+func makeRequest(r RequestOptions) (string, error) {
 	bodyByte, _ := json.Marshal(r.Body)
 	req, reqErr := http.NewRequest(r.Method, r.URL, bytes.NewBuffer(bodyByte))
 	if reqErr != nil {

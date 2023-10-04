@@ -63,18 +63,19 @@ func expandGRPCError(err error, c SyntheticsModelCustom) error {
 	if stat, ok := status.FromError(err); ok && stat.Code() == codes.Unimplemented {
 		return fmt.Errorf("error: this server does not implement the : %s", stat.Message())
 	} else if stat, ok := status.FromError(err); ok && stat.Code() == codes.DeadlineExceeded {
-		return fmt.Errorf("timeout: health rpc did not complete within %v", time.Duration(c.Expect.ResponseTimeLessThen)*time.Second)
+		return fmt.Errorf("timeout: health rpc did not complete within %v",
+			time.Duration(c.Expect.ResponseTimeLessThen)*time.Second)
 	} else if stat.Code() != codes.OK {
 		return fmt.Errorf("error: rpc failed, status is not OK %+v", err)
 	}
 	return err
 }
 
-func processGRPCError(err error, c SyntheticsModelCustom, timers map[string]float64) {
+func processGRPCError(testStatus testStatus, c SyntheticsModelCustom, timers map[string]float64) {
 	assertions := make([]map[string]string, 0)
 	for _, a := range c.Request.Assertions.GRPC.Cases {
 		assertions = append(assertions, map[string]string{
-			"status": string(reqStatusFail),
+			"status": testStatusFail,
 			"reason": "previous step failed",
 			"actual": "N/A",
 			"type":   a.Type,
@@ -84,14 +85,18 @@ func processGRPCError(err error, c SyntheticsModelCustom, timers map[string]floa
 	resultStr, _ := json.Marshal(assertions)
 	attrs := pcommon.NewMap()
 	attrs.PutStr("assertions", string(resultStr))
-	FinishCheckRequest(c, string(reqStatusError), err.Error(), timers, attrs)
+	// finishCheckRequest(c, testStatus, timers, attrs)
 }
 
 // check type grpc health
 func processGRPCHealthCheck(ctx context.Context, conn *grpc.ClientConn,
-	c SyntheticsModelCustom, timers map[string]float64) error {
+	c SyntheticsModelCustom, timers map[string]float64) testStatus {
 	var respHeaders metadata.MD
 	var respTrailers metadata.MD
+
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 
 	rpcCtx, rpcCancel := context.WithTimeout(ctx, time.Duration(c.Expect.ResponseTimeLessThen)*time.Second)
 	defer rpcCancel()
@@ -107,20 +112,28 @@ func processGRPCHealthCheck(ctx context.Context, conn *grpc.ClientConn,
 		grpc.Header(&respHeaders), grpc.Trailer(&respTrailers))
 	timers["duration"] = timeInMs(time.Since(rpcStart))
 	if err != nil {
-		return expandGRPCError(err, c)
+		err = expandGRPCError(err, c)
+		testStatus.status = testStatusError
+		testStatus.msg = err.Error()
+		return testStatus
 	}
 
 	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
-		return fmt.Errorf("service unhealthy (responded with %q)", resp.GetStatus().String())
+		testStatus.status = testStatusFail
+		testStatus.msg = fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String())
 	}
-	return nil
+	return testStatus
 }
 
 // check type grpc behaviour
 func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
-	c SyntheticsModelCustom, timers map[string]float64) (metadata.MD, error) {
+	c SyntheticsModelCustom, timers map[string]float64) (metadata.MD, testStatus) {
 	var respHeaders metadata.MD
 	var respTrailers metadata.MD
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	rpcStart := time.Now()
 
 	ty := c.Request.GRPCPayload.ServiceDefinition
@@ -135,7 +148,9 @@ func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
 
 		clientSymbol, err := refClient.FileContainingSymbol(svc)
 		if err != nil {
-			return respTrailers, fmt.Errorf("reflection method not found: %v", err)
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("reflection method not found: %v", err)
+			return respTrailers, testStatus
 		} else {
 			fsd = clientSymbol
 		}
@@ -151,11 +166,15 @@ func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
 
 		fds, err := p.ParseFiles(f.Name())
 		if err != nil {
-			return respTrailers, fmt.Errorf("could not parse given files: %v", err)
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("could not parse given files: %v", err)
+			return respTrailers, testStatus
 		}
 
 		if len(fds) == 0 {
-			return respTrailers, fmt.Errorf("no file descriptor found")
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("no file descriptor found")
+			return respTrailers, testStatus
 		}
 
 		if len(fds) > 0 {
@@ -174,61 +193,78 @@ func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
 
 	if dsc == nil {
 		timers["duration"] = timeInMs(time.Since(_start))
-		return respTrailers, fmt.Errorf("service not found %s", svc)
-	} else {
-		sd, ok := dsc.(*desc.ServiceDescriptor)
-		if !ok {
-			return respTrailers, fmt.Errorf("symbol %q is not a service", svc)
-		}
-		mtd := sd.FindMethodByName(mth)
-		if mtd == nil {
-			return respTrailers, fmt.Errorf("service %q does not include a method named %q", svc, mth)
-		} else {
-			timers["duration_resolve"] = timeInMs(time.Since(rpcStart))
-
-			var ext dynamic.ExtensionRegistry
-			msgFactory := dynamic.NewMessageFactoryWithExtensionRegistry(&ext)
-
-			if mtd.IsClientStreaming() || mtd.IsServerStreaming() {
-				return respTrailers, fmt.Errorf("streaming grpc calls are not supported")
-			} else {
-				rdr := strings.NewReader(c.Request.GRPCPayload.Message)
-				var msg json.RawMessage
-				deErr := json.NewDecoder(rdr).Decode(&msg)
-				if deErr != nil {
-					return respTrailers, fmt.Errorf("json decode failed %v", deErr)
-				} else {
-					unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
-					req := msgFactory.NewMessage(mtd.GetInputType())
-
-					uErr := unmarshaler.Unmarshal(bytes.NewReader(msg), req)
-					if uErr != nil {
-						return respTrailers, fmt.Errorf("unmarshaler.Unmarshal failed %v", uErr)
-					}
-
-					rpcStart = time.Now()
-
-					stub := grpcdynamic.NewStubWithMessageFactory(conn, msgFactory)
-					resp, ivErr := stub.InvokeRpc(ctx, mtd, req,
-						grpc.Trailer(&respTrailers), grpc.Header(&respHeaders))
-
-					if ivErr != nil {
-						return respTrailers, expandGRPCError(ivErr, c)
-					}
-
-					jsm := jsonpb.Marshaler{Indent: "  "}
-					_, mErr := jsm.MarshalToString(resp)
-					timers["duration"] = timeInMs(time.Since(rpcStart))
-					if mErr != nil {
-						return respTrailers, fmt.Errorf("resp msg decode failed %v", mErr)
-					}
-
-				}
-			}
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("service not found %s", svc)
+		return respTrailers, testStatus
 	}
 
-	return respTrailers, nil
+	sd, ok := dsc.(*desc.ServiceDescriptor)
+	if !ok {
+		timers["duration"] = timeInMs(time.Since(_start))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("symbol %q is not a service", svc)
+		return respTrailers, testStatus
+	}
+	mtd := sd.FindMethodByName(mth)
+	if mtd == nil {
+		timers["duration"] = timeInMs(time.Since(_start))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("service %q does not include a method named %q", svc, mth)
+		return respTrailers, testStatus
+	}
+
+	timers["duration_resolve"] = timeInMs(time.Since(rpcStart))
+
+	var ext dynamic.ExtensionRegistry
+	msgFactory := dynamic.NewMessageFactoryWithExtensionRegistry(&ext)
+
+	if mtd.IsClientStreaming() || mtd.IsServerStreaming() {
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("streaming grpc calls are not supported")
+		return respTrailers, testStatus
+	}
+
+	rdr := strings.NewReader(c.Request.GRPCPayload.Message)
+	var msg json.RawMessage
+	deErr := json.NewDecoder(rdr).Decode(&msg)
+	if deErr != nil {
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("json decode failed %v", deErr)
+		return respTrailers, testStatus
+	}
+
+	unmarshaler := jsonpb.Unmarshaler{AllowUnknownFields: true}
+	req := msgFactory.NewMessage(mtd.GetInputType())
+
+	uErr := unmarshaler.Unmarshal(bytes.NewReader(msg), req)
+	if uErr != nil {
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("unmarshaler.Unmarshal failed %v", uErr)
+		return respTrailers, testStatus
+	}
+
+	rpcStart = time.Now()
+
+	stub := grpcdynamic.NewStubWithMessageFactory(conn, msgFactory)
+	resp, ivErr := stub.InvokeRpc(ctx, mtd, req,
+		grpc.Trailer(&respTrailers), grpc.Header(&respHeaders))
+
+	if ivErr != nil {
+		testStatus.status = testStatusError
+		testStatus.msg = expandGRPCError(ivErr, c).Error()
+		return respTrailers, testStatus
+	}
+
+	jsm := jsonpb.Marshaler{Indent: "  "}
+	_, mErr := jsm.MarshalToString(resp)
+	timers["duration"] = timeInMs(time.Since(rpcStart))
+	if mErr != nil {
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("resp msg marshal failed %v", mErr)
+		return respTrailers, testStatus
+	}
+
+	return respTrailers, testStatus
 }
 
 type grpcChecker struct {
@@ -252,17 +288,16 @@ func newGRPCChecker(c SyntheticsModelCustom) protocolChecker {
 	}
 }
 
-func (checker *grpcChecker) fillGRPCAssertions() error {
+func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	c := checker.c
-	var newErr error
-	newErr = errTestStatusOK{
-		msg: string(reqStatusOK),
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
 
 	for _, assert := range c.Request.Assertions.GRPC.Cases {
 		ck := map[string]string{
 			"type":   assert.Type,
-			"status": string(reqStatusPass),
+			"status": testStatusPass,
 			"reason": "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 				" " + fmt.Sprintf("%v", assert.Config.Value),
 		}
@@ -271,59 +306,58 @@ func (checker *grpcChecker) fillGRPCAssertions() error {
 		case "response_time":
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			if !assertInt(int64(checker.timers["duration"]), assert) {
-				ck["status"] = string(reqStatusFail)
-				newErr = errTestStatusFail{
-					msg: fmt.Sprintf("duration did not match with condition"),
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "duration did not match withthe condition"
 			}
 			checker.assertions = append(checker.assertions, ck)
 
 		case "grpc_response":
 			ck["actual"] = checker.respStr
 			if !assertString(checker.respStr, assert) {
-				ck["status"] = string(reqStatusFail)
-				newErr = errTestStatusFail{
-					msg: fmt.Sprintf("response message didn't matched with the condition"),
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "response message didn't matched with the condition"
 			}
+
 			checker.assertions = append(checker.assertions, ck)
 
 		case "grpc_metadata":
 			actual := strings.Join(checker.respTrailers.Get(assert.Config.Target), "\n")
 			ck["actual"] = actual
 			if !assertString(actual, assert) {
-				ck["status"] = string(reqStatusFail)
-				newErr = errTestStatusFail{
-					msg: fmt.Sprintf("metadata message did not match with the condition"),
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "metadata message did not match with the condition"
 			}
 			checker.assertions = append(checker.assertions, ck)
 		}
 	}
-	return newErr
+	return testStatus
 }
 
-func (checker *grpcChecker) check() error {
+func (checker *grpcChecker) check() testStatus {
 	c := checker.c
 	ctx, _ := context.WithCancel(context.Background())
 
 	opts := make([]grpc.DialOption, 0)
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 
 	if c.Request.GRPCPayload.Certificate != "" && c.Request.GRPCPayload.PrivateKey != "" {
 		cred, err := buildCredentials(c.Request.GRPCPayload.IgnoreServerCertificateError, "", c.Request.GRPCPayload.Certificate, c.Request.GRPCPayload.PrivateKey, "")
 		if err != nil {
-			newErr := errTestStatusFail{
-				msg: fmt.Sprintf("failed to initialize tls credentials: %v", err),
-			}
-
-			processGRPCError(newErr, c, checker.timers)
-			return newErr
+			testStatus.status = testStatusFail
+			testStatus.msg = fmt.Sprintf("failed to initialize tls credentials: %v", err)
+			processGRPCError(testStatus, c, checker.timers)
+			return testStatus
 		}
 		opts = append(opts, grpc.WithTransportCredentials(cred))
 	} else {
 		/*roots, err := x509.SystemCertPool()
 		if err != nil {
-			log.Printf("root certificates error  %v", roots)
+			slog.Error("failed to read system root certificates", slog.Error(err))
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			RootCAs:            roots,
@@ -344,11 +378,10 @@ func (checker *grpcChecker) check() error {
 
 	conn, err := grpc.DialContext(dialCtx, c.Endpoint+":"+c.Request.Port, opts...)
 	if err != nil {
-		newErr := errTestStatusFail{
-			msg: fmt.Sprintf("did not connect: %v", err),
-		}
-		processGRPCError(newErr, c, checker.timers)
-		return newErr
+		testStatus.status = testStatusFail
+		testStatus.msg = fmt.Sprintf("did not connect: %v", err)
+		processGRPCError(testStatus, c, checker.timers)
+		return testStatus
 	}
 
 	defer conn.Close()
@@ -356,24 +389,20 @@ func (checker *grpcChecker) check() error {
 	checker.timers["duration_connection"] = timeInMs(time.Since(_start))
 
 	if c.Request.GRPCPayload.CheckType == "health" {
-		err = processGRPCHealthCheck(ctx, conn, c, checker.timers)
+		testStatus = processGRPCHealthCheck(ctx, conn, c, checker.timers)
 	} else {
-		checker.respTrailers, err = processGRPCBehaviourCheck(ctx, conn, c, checker.timers)
+		checker.respTrailers, testStatus = processGRPCBehaviourCheck(ctx, conn, c, checker.timers)
 	}
 
-	if err != nil {
-		processGRPCError(err, c, checker.timers)
-		return err
+	if testStatus.status != testStatusOK {
+		processGRPCError(testStatus, c, checker.timers)
+		return testStatus
 	}
 
-	err = checker.fillGRPCAssertions()
-	if err != nil {
-		processGRPCError(err, c, checker.timers)
-		return err
-	}
-	status := reqStatusOK
-	if err != nil {
-		status = reqStatusFail
+	testStatus = checker.fillGRPCAssertions()
+	if testStatus.status != testStatusOK {
+		processGRPCError(testStatus, c, checker.timers)
+		return testStatus
 	}
 
 	resultStr, _ := json.Marshal(checker.assertions)
@@ -381,7 +410,23 @@ func (checker *grpcChecker) check() error {
 	attrs := pcommon.NewMap()
 	attrs.PutStr("assertions", string(resultStr))
 
-	FinishCheckRequest(c, string(status), err.Error(), checker.timers, checker.attrs)
+	// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
+	return testStatus
+}
+
+func (checker *grpcChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *grpcChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *grpcChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *grpcChecker) getDetails() map[string]float64 {
 	return nil
 }
 

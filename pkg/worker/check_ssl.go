@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -59,18 +58,12 @@ func newSSLChecker(c SyntheticsModelCustom) protocolChecker {
 	}
 }
 
-func (checker *sslChecker) processSSLReponse(err error) {
+func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
 	c := checker.c
-	status := reqStatusOK
-	if errors.As(err, &errTestStatusError{}) {
-		status = reqStatusError
-	} else if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
-	}
 
-	if status != reqStatusOK {
+	if testStatus.status != testStatusOK {
 		checker.assertions = append(checker.assertions, map[string]string{
 			"type":   "certificate",
 			"reason": "will not be checked",
@@ -88,8 +81,7 @@ func (checker *sslChecker) processSSLReponse(err error) {
 	}
 
 	if c.CheckTestRequest.URL == "" {
-		FinishCheckRequest(c, string(status), err.Error(),
-			checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -101,7 +93,7 @@ func (checker *sslChecker) processSSLReponse(err error) {
 		},
 	})
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	WebhookSendCheckRequest(c, checker.testBody)
+	// finishTestRequest(c, checker.testBody)
 
 }
 
@@ -123,11 +115,12 @@ func getSupportedSSLVersions() (map[int]uint16, map[uint16]string) {
 	return versionsInt, versions
 }
 
-func (checker *sslChecker) fillAssertions(expiryDays int64) error {
-	var err error
-	err = errTestStatusPass{
-		msg: string(reqStatusPass),
+func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
+
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
+
 	c := checker.c
 	for _, assert := range c.Request.Assertions.Ssl.Cases {
 		assertVal := make(map[string]string)
@@ -145,12 +138,12 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) error {
 			assertVal["actual"] = strconv.FormatInt(expiryDays, 10) + " days"
 
 			if !assertInt(expiryDays, assert) {
-				assertVal["status"] = string(reqStatusFail)
-				err = errTestStatusFail{
-					msg: "assert failed, expiry didn't matched, certificate expire in " + strconv.FormatInt(expiryDays, 10) + " days",
-				}
+				assertVal["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "assert failed, expiry didn't matched, certificate expire in " +
+					strconv.FormatInt(expiryDays, 10) + " days"
 			} else {
-				assertVal["status"] = "PASS"
+				assertVal["status"] = testStatusPass
 			}
 			checker.assertions = append(checker.assertions, assertVal)
 
@@ -160,36 +153,37 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) error {
 				" " + assert.Config.Value + " ms"
 			assertVal["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
 			if !assertInt(int64(checker.timers["duration"]), assert) {
-				err = errTestStatusFail{
-					msg: "assert failed, response_time didn't matched",
-				}
+				testStatus.status = testStatusFail
+				testStatus.msg = "assert failed, response_time didn't matched"
 
-				assertVal["status"] = string(reqStatusFail)
-				//FinishCheckRequest(c, string(reqStatusFail),
-				//	"assert failed, response_time didn't matched",
-				//	checker.timers, checker.attrs)
-				return err
+				assertVal["status"] = testStatusFail
 			} else {
-				assertVal["status"] = "PASS"
+				assertVal["status"] = testStatusPass
 			}
 
 			checker.assertions = append(checker.assertions, assertVal)
 		}
 	}
-	return err
+	return testStatus
 }
 
 // check performs an SSL check on the given endpoint and returns an error if the check fails.
 // It checks the DNS server, establishes a TLS connection, and verifies the SSL certificate.
 // It populates various attributes and test results in the sslChecker struct.
 // This function is part of the synthetics-agent package and is located in the check_ssl.go file.
-func (checker *sslChecker) check() error {
+func (checker *sslChecker) check() testStatus {
 	start := time.Now()
 	host := checker.c.Endpoint + ":" + checker.c.Request.Port
 
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	roots, err := x509.SystemCertPool()
 	if err != nil {
-		return err
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error getting system cert pool %v", err)
+		return testStatus
 	}
 
 	dnsIps, _ := net.LookupIP(host)
@@ -210,11 +204,10 @@ func (checker *sslChecker) check() error {
 	})
 
 	if err != nil {
-		newErr := errTestStatusError{
-			msg: "server doesn't support ssl, " + err.Error(),
-		}
-		checker.processSSLReponse(newErr)
-		return newErr
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error connecting to server %v", err)
+		checker.processSSLReponse(testStatus)
+		return testStatus
 	}
 	defer conn.Close()
 
@@ -274,15 +267,11 @@ func (checker *sslChecker) check() error {
 		"status": cSta,
 	})
 	expiryDays := int64(cert.NotAfter.Sub(time.Now()).Hours() / 24)
-	var newErr error
-	newErr = errTestStatusPass{
-		msg: string(reqStatusPass),
-	}
 
 	if !checker.c.Request.SslSignedCertificate && !isCa {
-		newErr = errTestStatusFail{
-			msg: string(reqStatusPass),
-		}
+		testStatus.status = testStatusFail
+		testStatus.msg = "assert failed, certificate is not signed by CA"
+
 	} else {
 		checker.attrs.PutInt("tls.expire_in", expiryDays)
 		checker.attrs.PutStr("tls.allowed_host", strings.Join(cert.DNSNames, ", "))
@@ -292,10 +281,9 @@ func (checker *sslChecker) check() error {
 		}
 		hostMatchedErr := cert.VerifyHostname(checker.c.Request.SslServerName)
 		if hostMatchedErr != nil {
-			newErr = errTestStatusFail{
-				msg: fmt.Sprintf("hostname doesn't matched with %s %v",
-					strings.Join(cert.DNSNames, ","), hostMatchedErr.Error()),
-			}
+			testStatus.status = testStatusFail
+			testStatus.msg = fmt.Sprintf("hostname doesn't matched with %s %v",
+				strings.Join(cert.DNSNames, ","), hostMatchedErr.Error())
 		}
 
 		checker.testBody["assertions"] = []map[string]interface{}{
@@ -310,7 +298,23 @@ func (checker *sslChecker) check() error {
 
 	}
 
-	newErr = checker.fillAssertions(expiryDays)
-	checker.processSSLReponse(newErr)
+	testStatus = checker.fillAssertions(expiryDays)
+	checker.processSSLReponse(testStatus)
+	return testStatus
+}
+
+func (checker *sslChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *sslChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *sslChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *sslChecker) getDetails() map[string]float64 {
 	return nil
 }

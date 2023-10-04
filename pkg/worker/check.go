@@ -8,81 +8,69 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
+	"log/slog"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
-var _checks map[string]*CheckState = map[string]*CheckState{}
+//var _checks map[string]*CheckState = map[string]*CheckState{}
 
 type SyntheticsModelCustom struct {
 	Uid string
-	Not string
+	//Not string
 	SyntheticsModel
 }
 
 type protocolChecker interface {
-	check() error
+	check() testStatus
+	getTimers() map[string]float64
+	getAttrs() pcommon.Map
+	getTestBody() map[string]interface{}
+	getDetails() map[string]float64
 }
 
-type errTestStatusOK struct {
-	msg string
+type testStatus struct {
+	status string
+	msg    string
 }
-
-func (e errTestStatusOK) Error() string {
-	return e.msg
-}
-
-type errTestStatusPass struct {
-	msg string
-}
-
-func (e errTestStatusPass) Error() string {
-	return e.msg
-}
-
-type errTestStatusFail struct {
-	msg string
-}
-
-func (e errTestStatusFail) Error() string {
-	return e.msg
-}
-
-type errTestStatusFailed struct {
-	msg string
-}
-
-func (e errTestStatusFailed) Error() string {
-	return e.msg
-}
-
-type errTestStatusError struct {
-	msg string
-}
-
-func (e errTestStatusError) Error() string {
-	return e.msg
-}
-
-type reqStatus string
 
 var (
-	reqStatusOK   reqStatus = "OK"
-	reqStatusFail reqStatus = "FAIL"
-	// reqStatusFailed reqStatus = "FAILED"
-	reqStatusError reqStatus = "ERROR"
-	reqStatusPass  reqStatus = "PASS"
+	testStatusOK     string = "OK"
+	testStatusFail   string = "FAIL"
+	testStatusFailed string = "FAILED"
+	testStatusError  string = "ERROR"
+	testStatusPass   string = "PASS"
 )
 
-var protoCheckHandler = map[string]func(c SyntheticsModelCustom) protocolChecker{
-	"http":       newHTTPChecker,
-	"tcp":        newTCPChecker,
-	"dns":        newDNSChecker,
-	"ping":       newICMPChecker,
-	"icmp":       newICMPChecker,
-	"ssl":        newSSLChecker,
-	"udp":        newUDPChecker,
-	"web_socket": newWSChecker,
-	"grpc":       newGRPCChecker,
+func getProtocolChecker(c SyntheticsModelCustom) (protocolChecker, error) {
+
+	switch c.Proto {
+	case "http":
+		httpChecker, err := newHTTPChecker(c)
+		return httpChecker, err
+	case "tcp":
+		return newTCPChecker(c), nil
+	case "dns":
+		return newDNSChecker(c), nil
+	case "ping":
+		fallthrough
+	case "icmp":
+		pinger, err := getDefaultPinger(c)
+		if err != nil {
+			return nil, err
+		}
+		return newICMPChecker(c, pinger), nil
+	case "ssl":
+		return newSSLChecker(c), nil
+	case "udp":
+		return newUDPChecker(c), nil
+	case "web_socket":
+		return newWSChecker(c), nil
+	case "grpc":
+		return newGRPCChecker(c), nil
+	}
+
+	return nil, nil
 }
 
 func assertString(data string, assert CaseOptions) bool {
@@ -92,7 +80,7 @@ func assertString(data string, assert CaseOptions) bool {
 	if assert.Config.Operator == "is_not" && data == assert.Config.Value {
 		return false
 	}
-	if assert.Config.Operator == "contains" && strings.Index(data, assert.Config.Value) < 0 {
+	if assert.Config.Operator == "contains" && !strings.Contains(data, assert.Config.Value) {
 		return false
 	}
 	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains") && strings.Index(data, assert.Config.Value) >= 0 {
@@ -129,18 +117,19 @@ func assertInt(data int64, assert CaseOptions) bool {
 	return true
 }
 
-func (c SyntheticsModelCustom) fire() {
+func (cs *CheckState) fire() {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
-
+	c := cs.check
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error(r)
+			slog.Error("panic", slog.String("error", r.(string)))
 		}
 	}()
 
-	if c.Request.SpecifyFrequency.Type == "advanced" && c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
+	if c.Request.SpecifyFrequency.Type == "advanced" &&
+		c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
 		if err != nil {
@@ -168,42 +157,67 @@ func (c SyntheticsModelCustom) fire() {
 		}
 	}
 
-	reqHandler, ok := protoCheckHandler[c.Proto]
-	if !ok {
+	protocolChecker, err := getProtocolChecker(c)
+	if err != nil {
 		return
 	}
 
-	reqHandler(c)
+	testStatus := protocolChecker.check()
+
+	isTestReq := c.CheckTestRequest.URL != ""
+	if isTestReq {
+		cs.finishTestRequest(protocolChecker.getTestBody())
+	} else {
+		cs.finishCheckRequest(testStatus,
+			protocolChecker.getTimers(),
+			protocolChecker.getAttrs())
+	}
+
+	return
 }
 
 type CheckState struct {
-	timerStop func()
-	txnId     string
-	check     *SyntheticsModelCustom
+	//txnId     string
+	location        string
+	captureEndpoint string
+	check           SyntheticsModelCustom
+	timerStop       func()
+}
+
+func newCheckState(check SyntheticsModelCustom,
+	location string, captureEndpoint string) *CheckState {
+	return &CheckState{
+		location:        location,
+		captureEndpoint: captureEndpoint,
+		check:           check,
+		timerStop:       nil,
+		//txnId: txnId,
+	}
 }
 
 var lock sync.Mutex
 
-func RemoveCheck(check *SyntheticsModelCustom) {
+func (w *Worker) removeCheckState(check *SyntheticsModelCustom) {
 	lock.Lock()
 	defer lock.Unlock()
 	check.Uid = check.AccountUID + "_" + strconv.Itoa(check.Id)
 
-	if _checks[check.Uid] != nil {
-		//log.Printf("[%d][%d] removed", txnId, check.Id)
-		_checks[check.Uid].remove()
-		delete(_checks, check.Uid)
+	if w._checks[check.Uid] != nil {
+		w._checks[check.Uid].remove()
+		delete(w._checks, check.Uid)
 	}
 }
-
-func RunCheck(check *SyntheticsModelCustom) {
+func (w *Worker) getCheckState(check SyntheticsModelCustom) *CheckState {
 	lock.Lock()
 	defer lock.Unlock()
 	check.Uid = check.AccountUID + "_" + strconv.Itoa(check.Id)
-	if _checks[check.Uid] == nil {
-		_checks[check.Uid] = &CheckState{}
+	checkState, ok := w._checks[check.Uid]
+	if !ok {
+		checkState = newCheckState(check, w.cfg.Location,
+			w.cfg.CaptureEndpoint)
+		w._checks[check.Uid] = checkState
 	}
-	_checks[check.Uid].update(check)
+	return checkState
 }
 
 func (c *CheckState) remove() {
@@ -215,60 +229,57 @@ func (c *CheckState) remove() {
 var firing map[string]*sync.Mutex = map[string]*sync.Mutex{}
 var firingLock = sync.Mutex{}
 
-func (c *CheckState) update(chk *SyntheticsModelCustom) {
-	if chk != nil {
-		c.check = chk
-	}
-	if c.timerStop != nil {
-		c.timerStop()
+func (cs *CheckState) update() {
+	c := cs.check
+	if cs.timerStop != nil {
+		cs.timerStop()
 	}
 
-	diff := time.Now().UTC().UnixMilli() - (c.check.CreatedAt.UTC().UnixMilli() + 20)
-	interval := int64(c.check.IntervalSeconds) * 1000
+	diff := time.Now().UTC().UnixMilli() - (c.CreatedAt.UTC().UnixMilli() + 20)
+	interval := int64(c.IntervalSeconds) * 1000
 	fireIn := time.Duration(interval-(diff%interval)) * time.Millisecond
 
-	intervalDuration := time.Duration(c.check.IntervalSeconds) * time.Second
+	intervalDuration := time.Duration(c.IntervalSeconds) * time.Second
 
-	log.Printf("[%d] next fire in %s interval:%s", c.check.Id, fireIn.String(), intervalDuration.String())
+	slog.Info("next fire in", slog.String("interval", intervalDuration.String()),
+		slog.String("fireIn", fireIn.String()))
 
-	//diffx := (time.Now().UTC().Unix() - c.check.CreatedAt)
-	//log.Printf("[%d] next fire ins %s", c.check.Id, time.Duration((c.check.IntervalSeconds-(diffx%c.check.IntervalSeconds))*int64(time.Second)).String())
-
-	if chk.CheckTestRequest.URL != "" {
-		c.check.fire()
+	if c.CheckTestRequest.URL != "" {
+		cs.fire()
 		//RemoveCheck(c.check)
 		return
 	}
 
-	c.timerStop = TimerNew(func() {
+	cs.timerStop = TimerNew(func() {
 		firingLock.Lock()
 
-		if _, ok := firing[c.check.Uid]; !ok {
-			firing[c.check.Uid] = &sync.Mutex{}
+		if _, ok := firing[c.Uid]; !ok {
+			firing[c.Uid] = &sync.Mutex{}
 		}
-		lock := firing[c.check.Uid]
+		lock := firing[c.Uid]
 		firingLock.Unlock()
 
 		if !lock.TryLock() {
-			log.Printf("not allowed to run twice at same time")
+			slog.Info("not allowed to run twice at same time")
 			return
 		}
 
-		diff := time.Now().UTC().UnixMilli() - (c.check.CreatedAt.UTC().UnixMilli() + 20*1000)
-		interval := int64(c.check.IntervalSeconds) * 1000
+		diff := time.Now().UTC().UnixMilli() - (c.CreatedAt.UTC().UnixMilli() + 20*1000)
+		interval := int64(c.IntervalSeconds) * 1000
 		offBy := time.Duration((diff % interval)) * time.Millisecond
 
-		log.Printf("[%3d] fired %9d, routines:%8d	off:%s", c.check.Id, time.Now().Second(), runtime.NumGoroutine(), offBy.String())
+		slog.Info("update fired", slog.Int("id", c.Id), slog.Int("time", time.Now().Second()),
+			slog.Int("routines", runtime.NumGoroutine()), slog.String("off", offBy.String()))
 
-		if offBy > 2*time.Second {
+		/*if offBy > 2*time.Second {
 			log.Printf("------------------")
-		}
+		}*/
 
-		c.check.fire()
+		cs.fire()
 
 		firingLock.Lock()
 		lock.Unlock()
-		delete(firing, c.check.Uid)
+		delete(firing, c.Uid)
 		firingLock.Unlock()
 
 		//c.update(txnId, nil)

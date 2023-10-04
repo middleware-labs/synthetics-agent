@@ -102,6 +102,64 @@ type HTTPHeadersOptions struct {
 	Value string `json:"value"`
 }
 
+type ClientCertificate struct {
+	Certificate string `json:"certificate"`
+	PrivateKey  string `json:"private_key"`
+}
+
+type Basic struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Digest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Ntlm struct {
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	Domain      string `json:"domain"`
+	WorkStation string `json:"work_station"`
+}
+
+type AwsSignature struct {
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	Region          string `json:"region"`
+	ServiceName     string `json:"service_name"`
+	SessionToken    string `json:"session_token"`
+}
+	
+type Oauth21 struct {
+		CredentialsType        string `json:"credentials_type"`
+		TokenAPIAuthentication string `json:"token_api_authentication"`
+		AccessTokenURL         string `json:"access_token_url"`
+		Username               string `json:"username"`
+		Password               string `json:"password"`
+		ClientID               string `json:"client_id"`
+		ClientSecret           string `json:"client_secret"`
+		Audience               string `json:"audience"`
+		Resource               string `json:"resource"`
+		Scopes                 string `json:"scopes"`
+}
+
+type Authentication struct {
+	ClientCertificate ClientCertificate `json:"client_certificate"`
+	Type  string `json:"type"`
+	Basic Basic `json:"basic"`
+	Digest Digest`json:"digest"`
+	Ntlm Ntlm `json:"ntlm"`
+	AwsSignature AwsSignature `json:"aws_signature"`
+	Oauth21 Oauth21`json:"oauth2_1"`
+}
+
+type RequestBody struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
 type HTTPPayloadOptions struct {
 	FollowRedirects              bool   `json:"follow_redirects"`
 	IgnoreServerCertificateError bool   `json:"ignore_server_certificate_error"`
@@ -110,10 +168,7 @@ type HTTPPayloadOptions struct {
 		Name  string `json:"name"`
 		Value string `json:"value"`
 	} `json:"query_params"`
-	RequestBody struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
-	} `json:"request_body"`
+	RequestBody RequestBody `json:"request_body"`
 	Privacy struct {
 		SaveBodyResponse bool `json:"save_body_response"`
 	} `json:"privacy"`
@@ -124,46 +179,7 @@ type HTTPPayloadOptions struct {
 			Value string `json:"value"`
 		} `json:"headers"`
 	} `json:"proxy"`
-	Authentication struct {
-		ClientCertificate struct {
-			Certificate string `json:"certificate"`
-			PrivateKey  string `json:"private_key"`
-		} `json:"client_certificate"`
-		Type  string `json:"type"`
-		Basic struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		} `json:"basic"`
-		Digest struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		} `json:"digest"`
-		Ntlm struct {
-			Username    string `json:"username"`
-			Password    string `json:"password"`
-			Domain      string `json:"domain"`
-			WorkStation string `json:"work_station"`
-		} `json:"ntlm"`
-		AwsSignature struct {
-			AccessKeyID     string `json:"access_key_id"`
-			SecretAccessKey string `json:"secret_access_key"`
-			Region          string `json:"region"`
-			ServiceName     string `json:"service_name"`
-			SessionToken    string `json:"session_token"`
-		} `json:"aws_signature"`
-		Oauth21 struct {
-			CredentialsType        string `json:"credentials_type"`
-			TokenAPIAuthentication string `json:"token_api_authentication"`
-			AccessTokenURL         string `json:"access_token_url"`
-			Username               string `json:"username"`
-			Password               string `json:"password"`
-			ClientID               string `json:"client_id"`
-			ClientSecret           string `json:"client_secret"`
-			Audience               string `json:"audience"`
-			Resource               string `json:"resource"`
-			Scopes                 string `json:"scopes"`
-		} `json:"oauth2_1"`
-	} `json:"authentication"`
+	Authentication Authentication `json:"authentication"`
 }
 
 type ICMPPayloadOptions struct {

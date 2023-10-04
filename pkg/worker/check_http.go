@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,9 +22,13 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type httpChecker struct {
 	c          SyntheticsModelCustom
-	client     *http.Client
+	client     httpClient
 	assertions []map[string]string
 	timestamps map[string]int64
 	timers     map[string]float64
@@ -33,8 +36,12 @@ type httpChecker struct {
 	attrs      pcommon.Map
 }
 
-func newHTTPChecker(c SyntheticsModelCustom) protocolChecker {
-	parsedURL, _ := url.Parse(c.Endpoint)
+func newHTTPChecker(c SyntheticsModelCustom) (protocolChecker, error) {
+	parsedURL, err := url.Parse(c.Endpoint)
+	if err != nil {
+		return nil, err
+	}
+
 	return &httpChecker{
 		c:          c,
 		client:     getHTTPClient(c),
@@ -61,7 +68,7 @@ func newHTTPChecker(c SyntheticsModelCustom) protocolChecker {
 			"body":       "",
 		},
 		attrs: pcommon.NewMap(),
-	}
+	}, nil
 }
 
 func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error) {
@@ -73,6 +80,9 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	}
 
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)
+	if err != nil {
+		return nil, err
+	}
 
 	if c.Request.HTTPPayload.RequestBody.Type != "" {
 		req.Header.Set("Content-Type", c.Request.HTTPPayload.RequestBody.Type)
@@ -92,29 +102,27 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if digest && c.Request.HTTPPayload.Authentication.Type == "digest" &&
 		c.Request.HTTPPayload.Authentication.Digest.Username != "" &&
 		c.Request.HTTPPayload.Authentication.Digest.Password != "" {
-		_start := time.Now()
+		start := time.Now()
 		prereq, err := checker.buildHttpRequest(false)
 		if err != nil {
-			return nil, fmt.Errorf("error while requesting preauth %v", err)
+			return nil, fmt.Errorf("error while requesting preauth: %v", err)
 		}
 		respauth, err := checker.client.Do(prereq)
 		if err != nil {
-			return nil, fmt.Errorf("error while requesting preauth %v", err)
+			return nil, fmt.Errorf("error while requesting preauth: %v", err)
 		}
 		defer respauth.Body.Close()
 		if respauth.StatusCode != http.StatusUnauthorized {
 			return nil, fmt.Errorf("recieved status code '%v' while preauth but expected %d",
 				respauth.StatusCode, http.StatusUnauthorized)
-		} else {
-			parts := digestParts(respauth)
-			parts["uri"] = c.Endpoint
-			parts["method"] = c.Request.HTTPMethod
-			parts["username"] = c.Request.HTTPPayload.Authentication.Digest.Username
-			parts["password"] = c.Request.HTTPPayload.Authentication.Digest.Password
-
-			req.Header.Set("Authorization", getDigestAuthrization(parts))
 		}
-		checker.timers["preauth"] = timeInMs(time.Since(_start))
+		parts := digestParts(respauth)
+		parts["uri"] = c.Endpoint
+		parts["method"] = c.Request.HTTPMethod
+		parts["username"] = c.Request.HTTPPayload.Authentication.Digest.Username
+		parts["password"] = c.Request.HTTPPayload.Authentication.Digest.Password
+		req.Header.Set("Authorization", getDigestAuthrization(parts))
+		checker.timers["preauth"] = timeInMs(time.Since(start))
 	}
 
 	for _, header := range c.Request.HTTPHeaders {
@@ -140,36 +148,37 @@ func digestParts(resp *http.Response) map[string]string {
 	return result
 }
 
-func (checker *httpChecker) processHTTPError(err error) {
+func (checker *httpChecker) processHTTPError(testStatus testStatus) {
 	c := checker.c
 
-	checker.testBody["body"] = err.Error()
+	checker.testBody["body"] = testStatus.msg
 	checker.testBody["statusCode"] = http.StatusInternalServerError
 
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
 		checker.assertions = append(checker.assertions, map[string]string{
 			"type":   assert.Type,
-			"reason": err.Error(),
+			"reason": testStatus.msg,
 			"actual": "N/A",
 			"status": "FAIL",
 		})
 	}
 
-	checker.processHTTPResponse(err)
+	checker.processHTTPResponse()
 }
 
-func getHTTPClient(c SyntheticsModelCustom) *http.Client {
+func getHTTPClient(c SyntheticsModelCustom) httpClient {
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: c.Request.HTTPPayload.IgnoreServerCertificateError,
 			},
-			ForceAttemptHTTP2:   c.Request.HTTPVersion == "HTTP/2",
-			DisableKeepAlives:   false,
-			MaxIdleConns:        10,
-			TLSHandshakeTimeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThen*1000), float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
-			IdleConnTimeout:     30 * time.Second,
-			DisableCompression:  false,
+			ForceAttemptHTTP2: c.Request.HTTPVersion == "HTTP/2",
+			DisableKeepAlives: false,
+			MaxIdleConns:      10,
+			TLSHandshakeTimeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThen*1000),
+				float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
+			IdleConnTimeout:    30 * time.Second,
+			DisableCompression: false,
 		},
 		Timeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThen*1000),
 			float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
@@ -183,7 +192,7 @@ func getHTTPClient(c SyntheticsModelCustom) *http.Client {
 
 }
 
-func (checker *httpChecker) processHTTPResponse(err error) {
+func (checker *httpChecker) processHTTPResponse() {
 	c := checker.c
 	isCheckTestReq := c.CheckTestRequest.URL != ""
 	resultStr, _ := json.Marshal(checker.assertions)
@@ -199,20 +208,8 @@ func (checker *httpChecker) processHTTPResponse(err error) {
 		checker.timers["first_byte"] = checker.timers["first_byte"] - tt0
 	}
 
-	status := reqStatusOK
-	if errors.As(err, &errTestStatusError{}) {
-		status = reqStatusError
-	} else if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
-	}
-
-	/*if err != nil {
-		status = reqStatusError
-		message = err.Error()
-	}*/
-
 	if !isCheckTestReq {
-		FinishCheckRequest(c, string(status), err.Error(), checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -247,7 +244,7 @@ func (checker *httpChecker) processHTTPResponse(err error) {
 	checker.testBody["assertions"] = assert
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
 
-	WebhookSendCheckRequest(c, checker.testBody)
+	// finishTestRequest(c, checker.testBody)
 }
 
 func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
@@ -297,27 +294,33 @@ func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
 	}
 }
 
-func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]string, error) {
+func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
 	assertions := make(map[string]string)
-	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
-	var testErr error
+	assertions["reason"] = "should be " + assert.Config.Operator +
+		" " + assert.Config.Value
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	if !assertString(body, assert) {
-		testErr = errTestStatusFail{
-			msg: "assert failed, body didn't matched",
-		}
-		assertions["status"] = string(reqStatusFail)
+		testStatus.status = testStatusFail
+		testStatus.msg = "assert failed, body didn't matched"
+
+		assertions["status"] = testStatusFail
 		assertions["actual"] = "Not Matched"
 	} else {
-		assertions["status"] = string(reqStatusPass)
+		assertions["status"] = testStatusPass
 		assertions["actual"] = "Matched"
 	}
 
-	return assertions, testErr
+	return assertions, testStatus
 }
 
-func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[string]string, error) {
+func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
 	assertions := make(map[string]string)
-	var testErr error
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 	var hash string = ""
 	switch assert.Config.Target {
 	case "md5":
@@ -339,92 +342,95 @@ func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[str
 		" " + assert.Config.Value
 	assertions["actual"] = hash
 	if !assertString(hash, assert) {
-		testErr = errTestStatusFail{
-			msg: "body hash didn't matched",
-		}
-
-		assertions["status"] = string(reqStatusFail)
+		testStatus.status = testStatusFail
+		testStatus.msg = "body hash didn't matched"
+		assertions["status"] = testStatusFail
 	} else {
-		assertions["status"] = string(reqStatusPass)
+		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testErr
+	return assertions, testStatus
 }
 
-func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[string]string, error) {
+func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[string]string, testStatus) {
 	assertions := make(map[string]string)
-	var testErr error
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	assertions["actual"] = header
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertString(header, assert) {
-		testErr = errTestStatusFail{
-			msg: "assert failed, header (" +
-				assert.Config.Target + ")  didn't matched",
-		}
+		testStatus.status = testStatusFail
+		testStatus.msg = "assert failed, header (" +
+			assert.Config.Target + ")  didn't matched"
 
-		assertions["status"] = string(reqStatusFail)
+		assertions["status"] = testStatusFail
 	} else {
-		assertions["status"] = string(reqStatusPass)
+		assertions["status"] = testStatusPass
 	}
-	return assertions, testErr
+	return assertions, testStatus
 }
 
 func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
-	assert CaseOptions) (map[string]string, error) {
+	assert CaseOptions) (map[string]string, testStatus) {
 	assertions := make(map[string]string)
-	var testErr error
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
 
 	assertions["actual"] = fmt.Sprintf("%v", responseTime)
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertInt(int64(responseTime), assert) {
-		testErr = errTestStatusFail{
-			msg: "assert failed, response_time didn't matched",
-		}
-		assertions["status"] = string(reqStatusFail)
+		testStatus.status = testStatusFail
+		testStatus.msg = "assert failed, response_time didn't matched"
+		assertions["status"] = testStatusFail
 	} else {
-		assertions["status"] = string(reqStatusPass)
+		assertions["status"] = testStatusPass
 	}
-	return assertions, testErr
+	return assertions, testStatus
 }
 
 func getHTTPTestCaseStatusCodeAssertions(statusCode int,
-	assert CaseOptions) (map[string]string, error) {
+	assert CaseOptions) (map[string]string, testStatus) {
 	assertions := make(map[string]string)
-	var testErr error
+
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	assertions["actual"] = fmt.Sprintf("%v", statusCode)
 	assertions["reason"] = "should be " + assert.Config.Operator +
 		" " + assert.Config.Value
 	if !assertInt(int64(statusCode), assert) {
-		testErr = errTestStatusFail{
-			msg: "assert failed, status_code didn't matched (" +
-				assert.Config.Value + ") but got " + http.StatusText(statusCode),
-		}
-		assertions["status"] = string(reqStatusFail)
+		testStatus.status = testStatusFail
+		testStatus.msg = "assert failed, status_code didn't matched (" +
+			assert.Config.Value + ") but got " + http.StatusText(statusCode)
+		assertions["status"] = testStatusFail
 	} else {
-		assertions["status"] = string(reqStatusPass)
+		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testErr
+	return assertions, testStatus
 }
 
-func (checker *httpChecker) checkHTTPSingleStepRequest() error {
+func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	c := checker.c
 	start := time.Now()
 
-	var newErr error
-	newErr = errTestStatusOK{
-		msg: string(reqStatusOK),
+	tStatus := testStatus{
+		status: testStatusOK,
 	}
+
 	// build http request from client
 	httpReq, err := checker.buildHttpRequest(true)
 	if err != nil {
-		newErr = errTestStatusError{
-			msg: fmt.Sprintf("error while building request %v", err),
-		}
+		tStatus.status = testStatusError
+		tStatus.msg = fmt.Sprintf("error while building request %v", err)
 		checker.timers["duration"] = timeInMs(time.Since(start))
 
-		checker.processHTTPError(newErr)
-		return newErr
+		checker.processHTTPError(tStatus)
+		return tStatus
 	}
 
 	// get httptrace client
@@ -433,14 +439,13 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() error {
 	reqCtx := httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
 	resp, err := checker.client.Do(reqCtx)
 	if err != nil {
-		newErr = errTestStatusError{
-			msg: fmt.Sprintf("error while sending request %v", err),
-		}
+		tStatus.status = testStatusError
+		tStatus.msg = fmt.Sprintf("error while sending request %v", err)
 
 		checker.timers["duration"] = timeInMs(time.Since(start))
 
-		checker.processHTTPError(newErr)
-		return newErr
+		checker.processHTTPError(tStatus)
+		return tStatus
 	}
 
 	// process the response and setup attributes
@@ -484,60 +489,85 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() error {
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
 		artVal := make(map[string]string)
 		artVal["type"] = assert.Type
+		var assertStatus testStatus
 		switch assert.Type {
 		case "body":
 			var bodyAssertions map[string]string
-			bodyAssertions, newErr = getHTTPTestCaseBodyAssertions(bss, assert)
+			bodyAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
 			checker.assertions = append(checker.assertions, bodyAssertions)
 
 		case "body_hash":
 			var bodyHashAssertions map[string]string
-			bodyHashAssertions, newErr = getHTTPTestCaseBodyHashAssertions(bss, assert)
+			bodyHashAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
 			checker.assertions = append(checker.assertions, bodyHashAssertions)
 
 		case "header":
 			var headerAssertions map[string]string
 			assertHeader := resp.Header.Get(assert.Config.Target)
-			headerAssertions, newErr = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
+			headerAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
 			checker.assertions = append(checker.assertions, headerAssertions)
 
 		case "response_time":
 			var responseTimeAssertions map[string]string
 			responseTime := checker.timers["duration"]
-			responseTimeAssertions, newErr =
+			responseTimeAssertions, assertStatus =
 				getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
 			checker.assertions = append(checker.assertions, responseTimeAssertions)
 
 		case "status_code":
 			checkHttp200 = false
 			var statusCodeAssertions map[string]string
-			statusCodeAssertions, newErr =
+			statusCodeAssertions, assertStatus =
 				getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert)
 			checker.assertions = append(checker.assertions,
 				statusCodeAssertions)
 		}
-	}
 
-	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&
-		resp.StatusCode < http.StatusMultipleChoices) {
-		newErr = errTestStatusFail{
-			msg: "response code is not 2XX, received response code: " +
-				strconv.Itoa(resp.StatusCode),
+		if assertStatus.status != testStatusOK {
+			tStatus.status = testStatusFail
+			tStatus.msg = "one or more test cases failed"
 		}
 	}
 
-	checker.processHTTPResponse(newErr)
-	return newErr
+	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&
+		resp.StatusCode < http.StatusMultipleChoices /*300*/) {
+		tStatus.status = testStatusFail
+		tStatus.msg = "response code is not 2XX, received response code: " +
+			strconv.Itoa(resp.StatusCode)
+	}
+
+	checker.processHTTPResponse()
+	return tStatus
 }
 
-func (checker *httpChecker) check() error {
+func (checker *httpChecker) check() testStatus {
 	c := checker.c
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
 		checker.checkHTTPMultiStepsRequest(c)
-		return nil
+		return testStatus
 	}
 
 	return checker.checkHTTPSingleStepRequest()
+}
+
+func (checker *httpChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *httpChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *httpChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *httpChecker) getDetails() map[string]float64 {
+	return nil
 }
 
 func getMD5(text string) string {

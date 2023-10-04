@@ -2,7 +2,6 @@ package worker
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -11,12 +10,34 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+type netter interface {
+	lookupIP(host string) ([]net.IP, error)
+	dialTimeout(network, address string,
+		timeout time.Duration) (net.Conn, error)
+	connClose(conn net.Conn) error
+}
+
+type defaultNetter struct{}
+
+func (d *defaultNetter) lookupIP(host string) ([]net.IP, error) {
+	return net.LookupIP(host)
+}
+
+func (d *defaultNetter) dialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	return net.DialTimeout(network, address, timeout)
+}
+
+func (d *defaultNetter) connClose(conn net.Conn) error {
+	return conn.Close()
+}
+
 type tcpChecker struct {
 	c          SyntheticsModelCustom
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
 	attrs      pcommon.Map
+	netter     netter
 }
 
 func newTCPChecker(c SyntheticsModelCustom) protocolChecker {
@@ -36,6 +57,7 @@ func newTCPChecker(c SyntheticsModelCustom) protocolChecker {
 		},
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
+		netter:     &defaultNetter{},
 	}
 }
 
@@ -45,21 +67,14 @@ var (
 	tcpStatusTimeout     = "timeout"
 )
 
-func (checker *tcpChecker) processTCPResponse(err error) {
+func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 	c := checker.c
-	status := reqStatusOK
-	if errors.As(err, &errTestStatusError{}) {
-		status = reqStatusError
-	} else if errors.As(err, &errTestStatusFail{}) {
-		status = reqStatusFail
-	}
 
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 
-		FinishCheckRequest(c, string(status), err.Error(),
-			checker.timers, checker.attrs)
+		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 	} else {
 		testBody := make(map[string]interface{}, 0)
 		testBody["assertions"] = []map[string]interface{}{
@@ -71,32 +86,28 @@ func (checker *tcpChecker) processTCPResponse(err error) {
 				},
 			},
 		}
-		testBody["connection_status"] = status
+		testBody["connection_status"] = testStatus.status
 		testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-		WebhookSendCheckRequest(c, testBody)
+		// finishTestRequest(c, testBody)
 	}
-
 }
 
-func (checker *tcpChecker) processTCPAssertions(err error, tcpStatus string) {
+func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus string) testStatus {
 	for _, assert := range checker.c.Request.Assertions.TCP.Cases {
 		ck := make(map[string]string)
 		ck["type"] = assert.Type
 		ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 			" " + assert.Config.Value
-		ck["status"] = "PASS"
+		ck["status"] = testStatusPass
 
 		switch assert.Type {
 		case "response_time":
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] += ck["reason"] + "ms"
 			if !assertInt(int64(checker.timers["duration"]), assert) {
-				ck["status"] = "FAIL"
-				if !errors.As(err, &errTestStatusFail{}) {
-					err = errTestStatusFail{
-						msg: "assert failed, response_time didn't matched",
-					}
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "assert failed, response_time didn't matched"
 			}
 
 		case "network_hopes":
@@ -104,12 +115,9 @@ func (checker *tcpChecker) processTCPAssertions(err error, tcpStatus string) {
 			ck["actual"] = fmt.Sprintf("%v", v.Int())
 
 			if checker.c.Request.TTL && there && !assertInt(v.Int(), assert) {
-				ck["status"] = "FAIL"
-				if !errors.As(err, &errTestStatusFail{}) {
-					err = errTestStatusFail{
-						msg: "assert failed, network hopes count didn't matched",
-					}
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "assert failed, network hopes count didn't matched"
 			}
 
 		case "connection":
@@ -118,51 +126,50 @@ func (checker *tcpChecker) processTCPAssertions(err error, tcpStatus string) {
 			ck["reason"] = "should be is " + assert.Config.Value
 
 			if !assertString(tcpStatus, assert) {
-				ck["status"] = "FAIL"
-				if !errors.As(err, &errTestStatusFail{}) {
-					err = errTestStatusFail{
-						msg: "assert failed, connection status didn't matched",
-					}
-				}
+				ck["status"] = testStatusFail
+				testStatus.status = testStatusFail
+				testStatus.msg = "assert failed, connection status didn't matched"
 			}
 		}
 
 		checker.assertions = append(checker.assertions, ck)
 	}
+	return testStatus
 }
 
-func (checker *tcpChecker) processTCPTTL(addr []net.IP, lcErr error) error {
+func (checker *tcpChecker) processTCPTTL(addr []net.IP, lcErr error) testStatus {
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
 	if checker.c.Request.TTL {
 		if len(addr) > 0 {
-			if ttlErr := traceRoute(addr[0], checker.c,
-				checker.timers, checker.attrs); ttlErr != "" {
-				return errTestStatusFail{
-					msg: fmt.Sprintf("error resolving dns %v", ttlErr),
-				}
-			}
+			traceRouter := newTraceRouteChecker(addr[0],
+				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
+			tStatus := traceRouter.check()
+			testStatus.status = tStatus.status
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", tStatus)
 		} else {
-			return errTestStatusFail{
-				msg: fmt.Sprintf("error resolving dns %v", lcErr),
-			}
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", lcErr)
 		}
 	}
-	return nil
+	return testStatus
 }
 
-func (checker *tcpChecker) check() error {
-	var err error
-	err = errTestStatusOK{
-		msg: "OK",
+func (checker *tcpChecker) check() testStatus {
+	testStatus := testStatus{
+		status: testStatusOK,
 	}
+
 	tcpStatus := tcpStatusEstablished
 	start := time.Now()
 
-	addr, lcErr := net.LookupIP(checker.c.Endpoint)
+	addr, lcErr := checker.netter.lookupIP(checker.c.Endpoint)
 	if lcErr != nil {
 		checker.timers["duration"] = timeInMs(time.Since(start))
-		err = errTestStatusFail{
-			msg: fmt.Sprintf("error resolving dns %v", lcErr),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error resolving dns: %v", lcErr)
 
 		for _, assert := range checker.c.Request.Assertions.TCP.Cases {
 			checker.assertions = append(checker.assertions,
@@ -175,22 +182,20 @@ func (checker *tcpChecker) check() error {
 					"actual": "DNS resolution failed",
 				})
 		}
-		checker.processTCPResponse(err)
-		return err
+		checker.processTCPResponse(testStatus)
+		return testStatus
 	}
 
 	checker.timers["dns"] = timeInMs(time.Since(start))
 	cnTime := time.Now()
 
-	conn, tmErr := net.DialTimeout("tcp", addr[0].String()+
+	conn, tmErr := checker.netter.dialTimeout("tcp", addr[0].String()+
 		":"+checker.c.Request.Port,
 		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
 	if tmErr != nil {
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
-
-		err = errTestStatusFail{
-			msg: fmt.Sprintf("Error connecting tcp %v", tmErr),
-		}
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error connecting tcp %v", tmErr)
 
 		checker.attrs.PutStr("connection.error", tmErr.Error())
 		tcpStatus = tcpStatusRefused
@@ -198,7 +203,7 @@ func (checker *tcpChecker) check() error {
 			tcpStatus = tcpStatusTimeout
 		}
 	} else {
-		defer conn.Close()
+		defer checker.netter.connClose(conn)
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
 	}
 
@@ -208,8 +213,24 @@ func (checker *tcpChecker) check() error {
 	// process ttl
 	checker.processTCPTTL(addr, lcErr)
 	// process assertions
-	checker.processTCPAssertions(err, tcpStatus)
+	testStatus = checker.processTCPAssertions(testStatus, tcpStatus)
 	// process response
-	checker.processTCPResponse(err)
+	checker.processTCPResponse(testStatus)
+	return testStatus
+}
+
+func (checker *tcpChecker) getTimers() map[string]float64 {
+	return checker.timers
+}
+
+func (checker *tcpChecker) getAttrs() pcommon.Map {
+	return checker.attrs
+}
+
+func (checker *tcpChecker) getTestBody() map[string]interface{} {
+	return checker.testBody
+}
+
+func (checker *tcpChecker) getDetails() map[string]float64 {
 	return nil
 }
