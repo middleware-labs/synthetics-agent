@@ -26,7 +26,7 @@ type wsChecker struct {
 	attrs      pcommon.Map
 }
 
-func newWSChecker(c SyntheticsModelCustom) *wsChecker {
+func newWSChecker(c SyntheticsModelCustom) protocolChecker {
 	return &wsChecker{
 		c: c,
 		timers: map[string]float64{
@@ -301,9 +301,4 @@ func (checker *wsChecker) check() error {
 	checker.testBody["received_message"] = string(msg)
 
 	return nil
-}
-
-func CheckWsRequest(c SyntheticsModelCustom) {
-	checker := newWSChecker(c)
-	checker.check()
 }

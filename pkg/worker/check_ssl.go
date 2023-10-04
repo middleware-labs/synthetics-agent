@@ -22,7 +22,7 @@ type sslChecker struct {
 	attrs      pcommon.Map
 }
 
-func newSSLChecker(c SyntheticsModelCustom) *sslChecker {
+func newSSLChecker(c SyntheticsModelCustom) protocolChecker {
 	return &sslChecker{
 		c: c,
 		timers: map[string]float64{
@@ -313,9 +313,4 @@ func (checker *sslChecker) check() error {
 	newErr = checker.fillAssertions(expiryDays)
 	checker.processSSLReponse(newErr)
 	return nil
-}
-
-func CheckSslRequest(c SyntheticsModelCustom) {
-	checker := newSSLChecker(c)
-	checker.check()
 }

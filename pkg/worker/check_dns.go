@@ -150,7 +150,7 @@ type dnsChecker struct {
 	attrs      pcommon.Map
 }
 
-func newDNSChecker(c SyntheticsModelCustom) *dnsChecker {
+func newDNSChecker(c SyntheticsModelCustom) protocolChecker {
 	return &dnsChecker{
 		c:      c,
 		lookup: make([]map[string]string, 0),
@@ -412,10 +412,4 @@ func (checker *dnsChecker) check() error {
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
 	return newErr
-}
-
-func CheckDnsRequest(c SyntheticsModelCustom) {
-
-	dnsChecker := newDNSChecker(c)
-	dnsChecker.check()
 }

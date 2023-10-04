@@ -24,7 +24,7 @@ const (
 	udpStatusFailed     = "failed"
 )
 
-func newUDPChecker(c SyntheticsModelCustom) *udpChecker {
+func newUDPChecker(c SyntheticsModelCustom) protocolChecker {
 	return &udpChecker{
 		c: c,
 		timers: map[string]float64{
@@ -225,9 +225,4 @@ func (checker *udpChecker) check() error {
 
 	checker.processUDPResponse(err, received, start)
 	return newErr
-}
-
-func CheckUdpRequest(c SyntheticsModelCustom) {
-	checker := newUDPChecker(c)
-	checker.check()
 }

@@ -241,7 +241,7 @@ type grpcChecker struct {
 	attrs        pcommon.Map
 }
 
-func newGRPCChecker(c SyntheticsModelCustom) *grpcChecker {
+func newGRPCChecker(c SyntheticsModelCustom) protocolChecker {
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",
@@ -383,11 +383,6 @@ func (checker *grpcChecker) check() error {
 
 	FinishCheckRequest(c, string(status), err.Error(), checker.timers, checker.attrs)
 	return nil
-}
-
-func CheckGrpcRequest(c SyntheticsModelCustom) {
-	checker := newGRPCChecker(c)
-	checker.check()
 }
 
 func parseSymbol(svcAndMethod string) (string, string) {

@@ -33,7 +33,7 @@ type httpChecker struct {
 	attrs      pcommon.Map
 }
 
-func newHTTPChecker(c SyntheticsModelCustom) *httpChecker {
+func newHTTPChecker(c SyntheticsModelCustom) protocolChecker {
 	parsedURL, _ := url.Parse(c.Endpoint)
 	return &httpChecker{
 		c:          c,
@@ -61,14 +61,6 @@ func newHTTPChecker(c SyntheticsModelCustom) *httpChecker {
 			"body":       "",
 		},
 		attrs: pcommon.NewMap(),
-	}
-}
-
-func CheckHttpRequest(c SyntheticsModelCustom) {
-	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
-		CheckHTTPMultiStepsRequest(c)
-	} else {
-		CheckHttpSingleStepRequest(c)
 	}
 }
 
@@ -415,7 +407,7 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 	return assertions, testErr
 }
 
-func (checker *httpChecker) check() error {
+func (checker *httpChecker) checkHTTPSingleStepRequest() error {
 	c := checker.c
 	start := time.Now()
 
@@ -538,9 +530,14 @@ func (checker *httpChecker) check() error {
 	return newErr
 }
 
-func CheckHttpSingleStepRequest(c SyntheticsModelCustom) {
-	httpChecker := newHTTPChecker(c)
-	httpChecker.check()
+func (checker *httpChecker) check() error {
+	c := checker.c
+	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
+		checker.checkHTTPMultiStepsRequest(c)
+		return nil
+	}
+
+	return checker.checkHTTPSingleStepRequest()
 }
 
 func getMD5(text string) string {

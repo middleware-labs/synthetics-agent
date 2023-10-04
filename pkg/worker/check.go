@@ -73,16 +73,16 @@ var (
 	reqStatusPass  reqStatus = "PASS"
 )
 
-var protoCheckHandler = map[string]func(c SyntheticsModelCustom){
-	"http":       CheckHttpRequest,
-	"tcp":        CheckTcpRequest,
-	"dns":        CheckDnsRequest,
-	"ping":       CheckPingRequest,
-	"icmp":       CheckPingRequest,
-	"ssl":        CheckSslRequest,
-	"udp":        CheckUdpRequest,
-	"web_socket": CheckWsRequest,
-	"grpc":       CheckGrpcRequest,
+var protoCheckHandler = map[string]func(c SyntheticsModelCustom) protocolChecker{
+	"http":       newHTTPChecker,
+	"tcp":        newTCPChecker,
+	"dns":        newDNSChecker,
+	"ping":       newICMPChecker,
+	"icmp":       newICMPChecker,
+	"ssl":        newSSLChecker,
+	"udp":        newUDPChecker,
+	"web_socket": newWSChecker,
+	"grpc":       newGRPCChecker,
 }
 
 func assertString(data string, assert CaseOptions) bool {
@@ -99,7 +99,7 @@ func assertString(data string, assert CaseOptions) bool {
 		return false
 	}
 
-	if assert.Config.Operator == "matches_regex" && assert.Config.Operator == "not_matches_regex" {
+	if assert.Config.Operator == "matches_regex" || assert.Config.Operator == "not_matches_regex" {
 		found, err := regexp.MatchString(assert.Config.Value, data)
 		found = err == nil && found
 		if assert.Config.Operator == "matches_regex" && !found {

@@ -19,7 +19,7 @@ type tcpChecker struct {
 	attrs      pcommon.Map
 }
 
-func newTCPChecker(c SyntheticsModelCustom) *tcpChecker {
+func newTCPChecker(c SyntheticsModelCustom) protocolChecker {
 	return &tcpChecker{
 		c: c,
 		timers: map[string]float64{
@@ -212,9 +212,4 @@ func (checker *tcpChecker) check() error {
 	// process response
 	checker.processTCPResponse(err)
 	return nil
-}
-
-func CheckTcpRequest(c SyntheticsModelCustom) {
-	checker := newTCPChecker(c)
-	checker.check()
 }
