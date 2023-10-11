@@ -8,7 +8,6 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/gorilla/websocket v1.5.0
 	github.com/jhump/protoreflect v1.14.1
-	github.com/multiplay/go-cticker v0.0.0-20190411183326-bd2f021b1c08
 	github.com/prometheus-community/pro-bing v0.1.0
 	github.com/rs/zerolog v1.28.0
 	github.com/sirupsen/logrus v1.9.0
@@ -27,10 +26,10 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f // indirect
-	golang.org/x/sys v0.4.0 // indirect
-	golang.org/x/text v0.6.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20220822174746-9e6da59bd2fc // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
