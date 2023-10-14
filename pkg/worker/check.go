@@ -75,7 +75,8 @@ func getProtocolChecker(c SyntheticsModelCustom) (protocolChecker, error) {
 }
 
 func assertString(data string, assert CaseOptions) bool {
-	if (assert.Config.Operator == "is" || assert.Config.Operator == "equal") && data != assert.Config.Value {
+	if (assert.Config.Operator == "is" || assert.Config.Operator == "equal" ||
+		assert.Config.Operator == "equals") && data != assert.Config.Value {
 		return false
 	}
 	if assert.Config.Operator == "is_not" && data == assert.Config.Value {
@@ -98,6 +99,7 @@ func assertString(data string, assert CaseOptions) bool {
 			return false
 		}
 	}
+
 	return true
 }
 

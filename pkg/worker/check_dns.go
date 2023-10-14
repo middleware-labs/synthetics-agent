@@ -34,15 +34,23 @@ const (
 )
 
 var recordTypeToLookupFn = map[string]func(context.Context,
-	string, *net.Resolver) ([]string, map[string]interface{}, error){
+	string, resolver) ([]string, map[string]interface{}, error){
 	dnsRecordTypeTXT:   lookupTXT,
 	dnsRecordTypeNS:    lookupNS,
 	dnsRecordTypeMX:    lookupMX,
 	dnsRecordTypeCNAME: lookupCNAME,
 }
 
+type resolver interface {
+	LookupIP(ctx context.Context, network, host string) ([]net.IP, error)
+	LookupTXT(ctx context.Context, host string) ([]string, error)
+	LookupNS(ctx context.Context, host string) ([]*net.NS, error)
+	LookupMX(ctx context.Context, host string) ([]*net.MX, error)
+	LookupCNAME(ctx context.Context, host string) (string, error)
+}
+
 func lookupTXT(ctx context.Context, endpoint string,
-	resolver *net.Resolver) ([]string, map[string]interface{}, error) {
+	resolver resolver) ([]string, map[string]interface{}, error) {
 	asr := make(map[string]interface{})
 
 	txt, err := resolver.LookupTXT(ctx, endpoint)
@@ -67,7 +75,7 @@ func lookupTXT(ctx context.Context, endpoint string,
 }
 
 func lookupNS(ctx context.Context, endpoint string,
-	resolver *net.Resolver) ([]string, map[string]interface{}, error) {
+	resolver resolver) ([]string, map[string]interface{}, error) {
 	var nsHosts []string
 	asr := make(map[string]interface{})
 
@@ -97,7 +105,7 @@ func lookupNS(ctx context.Context, endpoint string,
 }
 
 func lookupMX(ctx context.Context, endpoint string,
-	resolver *net.Resolver) ([]string, map[string]interface{}, error) {
+	resolver resolver) ([]string, map[string]interface{}, error) {
 	var hosts []string
 	asr := make(map[string]interface{})
 
@@ -112,20 +120,20 @@ func lookupMX(ctx context.Context, endpoint string,
 
 	// This was not there in the old code. Adding it here and
 	// commenting it out. Why are assertions not needed for MX records?
-	/*asr = map[string]interface{}{
+	asr = map[string]interface{}{
 		"type": assertTypeDNSAtLeastOneRecord,
 		"config": map[string]string{
 			"operator": "is",
 			"value":    mx[0].Host,
 			"target":   "of_type_mx",
 		},
-	}*/
+	}
 
 	return hosts, asr, nil
 }
 
 func lookupCNAME(ctx context.Context, endpoint string,
-	resolver *net.Resolver) ([]string, map[string]interface{}, error) {
+	resolver resolver) ([]string, map[string]interface{}, error) {
 	var hosts []string
 	asr := make(map[string]interface{})
 
@@ -154,7 +162,7 @@ func lookupCNAME(ctx context.Context, endpoint string,
 type dnsChecker struct {
 	c          SyntheticsModelCustom
 	lookup     []map[string]string
-	resolver   *net.Resolver
+	resolver   resolver
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
@@ -233,13 +241,13 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			switch assert.Config.Target {
 			case "of_type_a":
 				for _, v := range ips {
-					if len(v) == net.IPv4len {
+					if v.To4() != nil {
 						records = append(records, v.String())
 					}
 				}
 			case "of_type_aaaa":
 				for _, v := range ips {
-					if len(v) == net.IPv6len {
+					if v.To16() != nil && len(v) == net.IPv6len {
 						records = append(records, v.String())
 					}
 				}
@@ -283,7 +291,6 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 
 			every := assert.Type == assertTypeDNSEveryAvailableRecord
 			match := false
-
 			if len(records) > 0 {
 				pass := true
 				for _, rec := range records {
@@ -294,9 +301,10 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 							//finishCheckRequest(c, "FAIL", "ip a record match failed with "+rec, timers, attrs)
 							//return
 						}
-						match = true
-						break
+						// match = true
+						// break
 					}
+					match = true
 				}
 
 				if ck["actual"] == "" {
@@ -332,7 +340,9 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 
 	isTestReq := checker.c.CheckTestRequest.URL != ""
 	if !isTestReq {
-		testStatus = checker.fillAssertions(ips)
+		tStatus := checker.fillAssertions(ips)
+		testStatus.status = tStatus.status
+		testStatus.msg = tStatus.msg
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 

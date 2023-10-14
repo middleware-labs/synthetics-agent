@@ -3,41 +3,73 @@ package worker
 import (
 	"context"
 	"net"
-	"strings"
 	"testing"
 )
 
-/*func TestDNSChecker_fillAssertions(t *testing.T) {
-	// create a new DNS checker instance
-	checker := &dnsChecker{
-		c: SyntheticsModelCustom{
-			SyntheticsModel: SyntheticsModel{
-				Endpoint: "example.com",
-				Request: SyntheticsRequestOptions{
-					Assertions: AssertionsOptions{
-						DNS: AssertionsCasesOptions{
-							Cases: []CaseOptions{
-								{
-									Type: assertTypeDNSResponseTime,
-									Config: struct {
-										Operator string `json:"operator"`
-										Target   string `json:"target"`
-										Value    string `json:"value"`
-									}{
-										Operator: "less_than",
-										Value:    "100",
-									},
-								},
-								{
-									Type: assertTypeDNSEveryAvailableRecord,
-									Config: struct {
-										Operator string `json:"operator"`
-										Target   string `json:"target"`
-										Value    string `json:"value"`
-									}{
-										Operator: "equals",
-										Target:   "of_type_a",
-										Value:    "",
+type mockResolver struct {
+	errLookupIP    error
+	errLookupTXT   error
+	errLookupNS    error
+	errLookupMX    error
+	errLookupCNAME error
+
+	ips   []net.IP
+	txt   []string
+	ns    []*net.NS
+	mx    []*net.MX
+	cname string
+}
+
+func (r *mockResolver) LookupIP(ctx context.Context, network, host string) ([]net.IP, error) {
+	return r.ips, r.errLookupIP
+}
+
+func (r *mockResolver) LookupTXT(ctx context.Context, host string) ([]string, error) {
+	return r.txt, r.errLookupTXT
+}
+
+func (r *mockResolver) LookupNS(ctx context.Context, host string) ([]*net.NS, error) {
+	return r.ns, r.errLookupNS
+}
+
+func (r *mockResolver) LookupMX(ctx context.Context, host string) ([]*net.MX, error) {
+	mxs := []*net.MX{}
+	mxs = append(mxs, r.mx...)
+	return mxs, r.errLookupMX
+}
+
+func (r *mockResolver) LookupCNAME(ctx context.Context, host string) (string, error) {
+	return r.cname, r.errLookupCNAME
+}
+
+func TestDNSFillAssertions(t *testing.T) {
+	tests := []struct {
+		name     string
+		c        SyntheticsModelCustom
+		resolver *mockResolver
+		ips      []net.IP
+		want     testStatus
+		wantErr  bool
+	}{
+		{
+			name: "DNS response time assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSResponseTime,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "less_than",
+											Value:    "100",
+										},
 									},
 								},
 							},
@@ -45,217 +77,1019 @@ import (
 					},
 				},
 			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
 		},
-		resolver: &net.Resolver{},
+		{
+			name: "DNS every available record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSEveryAvailableRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_a",
+											Value:    "192.168.1.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS at least one record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_a",
+											Value:    "192.168.1.1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS CNAME record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+
+											Value string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_cname",
+											Value:    "cname.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				cname: "cname.example.com",
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "DNS CNAME record assertion failure",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+
+											Value string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_cname",
+											Value:    "cname.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				cname: "cname2.example.com",
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "assertion failed with cname2.example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS CNAME record assertion resolver error",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+
+											Value string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_cname",
+											Value:    "cname.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				errLookupCNAME: &net.DNSError{
+					Err: "resolver error",
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "no record matched with given condition ",
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "DNS MX record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_mx",
+											Value:    "mx.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS MX record assertion failure",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_mx",
+											Value:    "mx2.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "assertion failed with mx.example.com",
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "DNS MX record resolver error",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_mx",
+											Value:    "mx.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				errLookupMX: &net.DNSError{
+					Err: "resolver error",
+				},
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+				},
+			},
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "no record matched with given condition ",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS NS record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_ns",
+											Value:    "ns.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS NS record resolver error",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_ns",
+											Value:    "ns.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				errLookupNS: &net.DNSError{
+					Err: "resolver error",
+				},
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "no record matched with given condition ",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS NS record assertion failure",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_ns",
+											Value:    "ns2.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "assertion failed with ns.example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS TXT record assertion",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_txt",
+											Value:    "txt.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				txt: []string{
+					"txt.example.com",
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusOK,
+				msg:    "",
+			},
+			wantErr: false,
+		},
+
+		{
+			name: "DNS TXT record assertion failure",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_txt",
+											Value:    "txt2.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				txt: []string{
+					"txt.example.com",
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "assertion failed with txt.example.com",
+			},
+			wantErr: false,
+		},
+		{
+			name: "DNS TXT record resolver error",
+			c: SyntheticsModelCustom{
+				SyntheticsModel: SyntheticsModel{
+					Endpoint: "example.com",
+					Request: SyntheticsRequestOptions{
+						Assertions: AssertionsOptions{
+							DNS: AssertionsCasesOptions{
+								Cases: []CaseOptions{
+									{
+										Type: assertTypeDNSAtLeastOneRecord,
+										Config: struct {
+											Operator string `json:"operator"`
+											Target   string `json:"target"`
+											Value    string `json:"value"`
+										}{
+											Operator: "equals",
+											Target:   "of_type_txt",
+											Value:    "txt2.example.com",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
+			resolver: &mockResolver{
+				errLookupTXT: &net.DNSError{
+					Err: "resolver error",
+				},
+				txt: []string{
+					"txt.example.com",
+				},
+			},
+
+			ips: []net.IP{
+				net.ParseIP("192.168.1.1"),
+			},
+			want: testStatus{
+				status: testStatusFail,
+				msg:    "no record matched with given condition ",
+			},
+			wantErr: false,
+		},
 	}
 
-	// create a mock list of IPs to test against
-	ips := []net.IP{
-		net.ParseIP("192.0.2.1"),
-		net.ParseIP("192.0.2.2"),
-		net.ParseIP("192.0.2.3"),
+	for _, tt := range tests {
+		checker := &dnsChecker{
+			c:        tt.c,
+			resolver: tt.resolver,
+		}
+		t.Run(tt.name, func(t *testing.T) {
+			got := checker.fillAssertions(tt.ips)
+			if got.status != tt.want.status {
+				t.Fatalf("%s: gotStatus = %v (%s), want %v (%s)",
+					tt.name, got.status, got.msg, tt.want.status,
+					tt.want.msg)
+			}
+			if got.msg != tt.want.msg {
+				t.Fatalf("%s: gotMsg %v, want %v",
+					tt.name, got.msg, tt.want.msg)
+			}
+		})
 	}
-
-	// test DNS response time assertion
-	testStatus := checker.fillAssertions(ips)
-	if testStatus.status != testStatusOK {
-		t.Fatalf("DNS response time assertion failed: %s", testStatus.msg)
-	}
-
-	// test DNS every available record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Config.Target = "of_type_aaaa"
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusFail {
-		t.Fatalf("DNS every available record assertion should have failed")
-	}
-
-	// test DNS at least one record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Type = assertTypeDNSAtLeastOneRecord
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusOK {
-		t.Fatalf("DNS at least one record assertion failed: %s", testStatus.msg)
-	}
-
-	// test DNS CNAME record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Config.Target = "of_type_cname"
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusFail {
-		t.Fatalf("DNS CNAME record assertion should have failed")
-	}
-
-	// test DNS MX record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Config.Target = "of_type_mx"
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusFail {
-		t.Fatalf("DNS MX record assertion should have failed")
-	}
-
-	// test DNS NS record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Config.Target = "of_type_ns"
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusFail {
-		t.Fatalf("DNS NS record assertion should have failed")
-	}
-
-	// test DNS TXT record assertion
-	checker.c.Request.Assertions.DNS.Cases[1].Config.Target = "of_type_txt"
-	testStatus = checker.fillAssertions(ips)
-	if testStatus.status != testStatusFail {
-		t.Fatalf("DNS TXT record assertion should have failed")
-	}
-}*/
+}
 
 func TestLookupTXT(t *testing.T) {
-	ctx := context.Background()
-	resolver := &net.Resolver{}
+	tests := []struct {
+		name       string
+		resolver   *mockResolver
+		asrCount   int
+		wantErrMsg string
+		wantTXT    []string
+	}{
+		{
+			name: "Single TXT record",
+			resolver: &mockResolver{
+				txt: []string{
+					"txt.example.com",
+				},
+			},
+			wantTXT: []string{
+				"txt.example.com",
+			},
+		},
+		{
+			name: "TXT record with error",
+			resolver: &mockResolver{
+				errLookupTXT: &net.DNSError{
+					Err: "resolver error",
+				},
+				txt: []string{
+					"txt.example.com",
+				},
+			},
+			wantErrMsg: "lookup : resolver error",
+			wantTXT: []string{
+				"txt.example.com",
+			},
+		},
+	}
 
-	// Test case 1: Lookup TXT record for a valid endpoint
-	endpoint := "example.com"
-	txt, asr, err := lookupTXT(ctx, endpoint, resolver)
-	if err != nil {
-		t.Fatalf("Expected no error, but got %v", err)
-	}
-	if len(txt) == 0 {
-		t.Fatalf("Expected at least one TXT record, but got none")
-	}
-	if asr["type"] != assertTypeDNSAtLeastOneRecord {
-		t.Fatalf("Expected assertion type %v, but got %v", assertTypeDNSAtLeastOneRecord, asr["type"])
-	}
-	if asr["config"].(map[string]string)["operator"] != "is" {
-		t.Fatalf("Expected operator %v, but got %v", "is", asr["config"].(map[string]string)["operator"])
-	}
-	if asr["config"].(map[string]string)["value"] != strings.Join(txt, ",") {
-		t.Fatalf("Expected value %v, but got %v", strings.Join(txt, ","), asr["config"].(map[string]string)["value"])
-	}
-	if asr["config"].(map[string]string)["target"] != "of_type_txt" {
-		t.Fatalf("Expected target %v, but got %v", "of_type_txt", asr["config"].(map[string]string)["target"])
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	// Test case 2: Lookup TXT record for an invalid endpoint
-	endpoint = "invalid.example.com"
-	txt, asr, err = lookupTXT(ctx, endpoint, resolver)
-	if err == nil {
-		t.Fatalf("Expected error, but got none")
-	}
-	if len(txt) != 0 {
-		t.Fatalf("Expected no TXT record, but got %v", txt)
-	}
+			ctx := context.Background()
+			endpoint := "middleware.io"
+			txts, asr, err := lookupTXT(ctx, endpoint, tt.resolver)
+			if err != nil && err.Error() != tt.wantErrMsg {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
 
-	if len(asr) != 0 {
-		t.Fatalf("Expected no TXT record, but got %v", asr)
+			if err == nil && tt.wantErrMsg != "" {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err != nil {
+				return
+			}
+
+			for _, txt := range txts {
+				found := false
+				for _, wantTXT := range tt.wantTXT {
+					if txt == wantTXT {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("%s: expected %v, but got %v",
+						tt.name, tt.wantTXT, txt)
+				}
+			}
+			if len(asr) != 2 {
+				t.Fatalf("%s: expected two MX assertions, but got %v",
+					tt.name, asr)
+			}
+		})
 	}
 
 }
 func TestLookupNS(t *testing.T) {
-	ctx := context.Background()
-	resolver := &net.Resolver{}
+	tests := []struct {
+		name       string
+		resolver   *mockResolver
+		asrCount   int
+		wantErrMsg string
+		wantNS     []*net.NS
+	}{
+		{
+			name: "NS record with one authoritative server",
+			resolver: &mockResolver{
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+				},
+			},
+			wantNS: []*net.NS{
+				{
+					Host: "ns.example.com",
+				},
+			},
+		},
+		{
+			name: "NS record with multiple authoritative servers",
+			resolver: &mockResolver{
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+					{
+						Host: "ns2.example.com",
+					},
+				},
+			},
+			wantNS: []*net.NS{
+				{
+					Host: "ns2.example.com",
+				},
+				{
+					Host: "ns.example.com",
+				},
+			},
+		},
+		{
+			name: "NS record with error",
+			resolver: &mockResolver{
+				errLookupNS: &net.DNSError{
+					Err: "resolver error",
+				},
+				ns: []*net.NS{
+					{
+						Host: "ns.example.com",
+					},
+				},
+			},
+			wantErrMsg: "lookup : resolver error",
+			wantNS: []*net.NS{
+				{
+					Host: "ns.example.com",
+				},
+				{
+					Host: "ns2.example.com",
+				},
+			},
+		},
+	}
 
-	// Test case 1: Lookup NS record for a valid endpoint
-	endpoint := "example.com"
-	nsHosts, asr, err := lookupNS(ctx, endpoint, resolver)
-	if err != nil {
-		t.Fatalf("Expected no error, but got %v", err)
-	}
-	if len(nsHosts) == 0 {
-		t.Fatalf("Expected at least one NS record, but got none")
-	}
-	if asr["type"] != assertTypeDNSAtLeastOneRecord {
-		t.Fatalf("Expected assertion type %v, but got %v", assertTypeDNSAtLeastOneRecord, asr["type"])
-	}
-	if asr["config"].(map[string]string)["operator"] != "is" {
-		t.Fatalf("Expected operator %v, but got %v", "is", asr["config"].(map[string]string)["operator"])
-	}
-	if asr["config"].(map[string]string)["value"] != nsHosts[0] {
-		t.Fatalf("Expected value %v, but got %v", nsHosts[0], asr["config"].(map[string]string)["value"])
-	}
-	if asr["config"].(map[string]string)["target"] != "of_type_ns" {
-		t.Fatalf("Expected target %v, but got %v", "of_type_ns", asr["config"].(map[string]string)["target"])
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	// Test case 2: Lookup NS record for an invalid endpoint
-	endpoint = "invalid.example.com"
-	nsHosts, asr, err = lookupNS(ctx, endpoint, resolver)
-	if err == nil {
-		t.Fatalf("Expected error, but got none")
-	}
-	if len(nsHosts) != 0 {
-		t.Fatalf("Expected no NS record, but got %v", nsHosts)
-	}
+			ctx := context.Background()
+			endpoint := "middleware.io"
+			ns, asr, err := lookupNS(ctx, endpoint, tt.resolver)
+			if err != nil && err.Error() != tt.wantErrMsg {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
 
-	if len(asr) != 0 {
-		t.Fatalf("Expected no NS assertions, but got %v", asr)
+			if err == nil && tt.wantErrMsg != "" {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err != nil {
+				return
+			}
+
+			for _, host := range ns {
+				found := false
+				for _, wantHost := range tt.wantNS {
+					if host == wantHost.Host {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("%s: expected %v, but got %v",
+						tt.name, tt.wantNS, ns)
+				}
+			}
+
+			if len(asr) != 2 {
+				t.Fatalf("%s: expected two MX assertions, but got %v",
+					tt.name, asr)
+			}
+		})
 	}
 }
 
 func TestLookupMX(t *testing.T) {
-	ctx := context.Background()
-	resolver := &net.Resolver{}
+	tests := []struct {
+		name       string
+		resolver   *mockResolver
+		asrCount   int
+		wantErrMsg string
+		wantMX     []*net.MX
+	}{
+		{
+			name: "MX record with one host",
+			resolver: &mockResolver{
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+				},
+			},
+			wantMX: []*net.MX{
+				{
+					Host: "mx.example.com",
+					Pref: 1,
+				},
+			},
+		},
+		{
+			name: "MX record with multiple hosts",
+			resolver: &mockResolver{
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+					{
+						Host: "mx2.example.com",
+						Pref: 2,
+					},
+				},
+			},
+			wantMX: []*net.MX{
+				{
+					Host: "mx2.example.com",
+					Pref: 2,
+				},
+				{
+					Host: "mx.example.com",
+					Pref: 1,
+				},
+			},
+		},
 
-	// Test case 1: Lookup MX record for a valid endpoint
-	endpoint := "middleware.io"
-	hosts, asr, err := lookupMX(ctx, endpoint, resolver)
-	if err != nil {
-		t.Fatalf("Expected no error, but got %v", err)
-	}
-	if len(hosts) == 0 {
-		t.Fatalf("Expected at least one MX record, but got none")
+		{
+			name: "MX record with error",
+			resolver: &mockResolver{
+				errLookupMX: &net.DNSError{
+					Err: "resolver error",
+				},
+				mx: []*net.MX{
+					{
+						Host: "mx.example.com",
+						Pref: 1,
+					},
+				},
+			},
+			wantErrMsg: "lookup : resolver error",
+			wantMX: []*net.MX{
+				{
+					Host: "mx.example.com",
+					Pref: 1,
+				},
+			},
+		},
 	}
 
-	if len(asr) != 0 {
-		t.Fatalf("Expected no MX assertions, but got %v", asr)
-	}
-	// Test case 2: Lookup MX record for an invalid endpoint
-	endpoint = "invalid.example.com"
-	hosts, asr, err = lookupMX(ctx, endpoint, resolver)
-	if err == nil {
-		t.Fatalf("Expected error, but got none")
-	}
-	if len(hosts) != 0 {
-		t.Fatalf("Expected no NS record, but got %v", hosts)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 
-	if len(asr) != 0 {
-		t.Fatalf("Expected no MX assertions, but got %v", asr)
+			ctx := context.Background()
+			endpoint := "middleware.io"
+			hosts, asr, err := lookupMX(ctx, endpoint, tt.resolver)
+			if err != nil && err.Error() != tt.wantErrMsg {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err == nil && tt.wantErrMsg != "" {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err != nil {
+				return
+			}
+
+			for _, host := range hosts {
+				found := false
+				for _, wantHost := range tt.wantMX {
+					if host == wantHost.Host {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("%s: expected %v, but got %v",
+						tt.name, tt.wantMX, hosts)
+				}
+			}
+
+			if len(asr) != 2 {
+				t.Fatalf("%s: expected two MX assertions, but got %v",
+					tt.name, asr)
+			}
+		})
 	}
 }
 func TestLookupCNAME(t *testing.T) {
-	ctx := context.Background()
-	resolver := &net.Resolver{}
-
-	// Test case 1: Lookup CNAME record for a valid endpoint
-	endpoint := "example.com"
-	cname, asr, err := lookupCNAME(ctx, endpoint, resolver)
-	if err != nil {
-		t.Fatalf("Expected no error, but got %v", err)
-	}
-	if len(cname) == 0 {
-		t.Fatalf("Expected at least one CNAME record, but got none")
-	}
-
-	if asr["type"] != assertTypeDNSAtLeastOneRecord {
-		t.Fatalf("Expected assertion type %v, but got %v", assertTypeDNSAtLeastOneRecord, asr["type"])
-	}
-	if asr["config"].(map[string]string)["operator"] != "is" {
-		t.Fatalf("Expected operator %v, but got %v", "is", asr["config"].(map[string]string)["operator"])
-	}
-	if asr["config"].(map[string]string)["value"] != cname[0] {
-		t.Fatalf("Expected value %v, but got %v", "", asr["config"].(map[string]string)["value"])
-	}
-	if asr["config"].(map[string]string)["target"] != "of_type_cname" {
-		t.Fatalf("Expected target %v, but got %v", "of_type_cname", asr["config"].(map[string]string)["target"])
-	}
-
-	// Test case 2: Lookup CNAME record for an invalid endpoint
-	endpoint = "invalid.example.com"
-	cname, asr, err = lookupCNAME(ctx, endpoint, resolver)
-	if err == nil {
-		t.Fatalf("Expected error, but got none")
-	}
-	if len(cname) != 0 {
-		t.Fatalf("Expected no CNAME record, but got %v", cname)
+	tests := []struct {
+		name       string
+		resolver   *mockResolver
+		asrCount   int
+		wantErrMsg string
+		wantCNAME  []string
+	}{
+		{
+			name: "cname lookup with one record",
+			resolver: &mockResolver{
+				cname: "cname.example.com",
+			},
+			wantCNAME: []string{
+				"cname.example.com",
+			},
+		},
+		{
+			name: "cname lookup with error",
+			resolver: &mockResolver{
+				errLookupCNAME: &net.DNSError{
+					Err: "resolver error",
+				},
+			},
+			wantErrMsg: "lookup : resolver error",
+			wantCNAME:  []string{},
+		},
 	}
 
-	if len(asr) != 0 {
-		t.Fatalf("Expected no CNAME assertions, but got %v", asr)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+
+			ctx := context.Background()
+			endpoint := "middleware.io"
+			cnames, asr, err := lookupCNAME(ctx, endpoint, tt.resolver)
+			if err != nil && err.Error() != tt.wantErrMsg {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err == nil && tt.wantErrMsg != "" {
+				t.Fatalf("%s: expected '%v', but got '%v'",
+					tt.name, tt.wantErrMsg, err)
+			}
+
+			if err != nil {
+				return
+			}
+
+			for _, host := range cnames {
+				found := false
+				for _, wantHost := range tt.wantCNAME {
+					if host == wantHost {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("%s: expected %v, but got %v",
+						tt.name, tt.wantCNAME, cnames)
+				}
+			}
+
+			if len(asr) != 2 {
+				t.Fatalf("%s: expected two MX assertions, but got %v",
+					tt.name, asr)
+			}
+		})
 	}
 }
