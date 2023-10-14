@@ -18,11 +18,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
+	"golang.org/x/sync/errgroup"
 )
 
-var _md map[string]*pmetric.Metrics = make(map[string]*pmetric.Metrics)
+var md map[string]*pmetric.Metrics = make(map[string]*pmetric.Metrics)
 
-var _exportTimer func()
+var exportTimer func()
 
 var syn = sync.Mutex{}
 
@@ -30,17 +31,17 @@ func (cs *CheckState) getResourceMetrics() pmetric.ResourceMetrics {
 	syn.Lock()
 	defer syn.Unlock()
 	check := cs.check
-	if _exportTimer == nil {
-		_exportTimer = TimerNew(func() {
+	if exportTimer == nil {
+		exportTimer = TimerNew(func() {
 			cs.exportMetrics()
 		}, 5*time.Second, 5*time.Second)
 	}
 
-	if _md[check.AccountUID] == nil {
+	if md[check.AccountUID] == nil {
 		pm := pmetric.NewMetrics()
-		_md[check.AccountUID] = &pm
+		md[check.AccountUID] = &pm
 	}
-	pm := _md[check.AccountUID]
+	pm := md[check.AccountUID]
 	for i := 0; i < pm.ResourceMetrics().Len(); i++ {
 		rm := pm.ResourceMetrics().At(i)
 		val, ok := rm.Resource().Attributes().Get("check.check_id")
@@ -57,20 +58,19 @@ func (cs *CheckState) getResourceMetrics() pmetric.ResourceMetrics {
 	return rm
 }
 
-func (cs *CheckState) exportMetrics() {
+func (cs *CheckState) exportMetrics() error {
 	syn.Lock()
-	all := _md
-	_md = make(map[string]*pmetric.Metrics)
+	all := md
+	md = make(map[string]*pmetric.Metrics)
 	syn.Unlock()
 	if len(all) == 0 {
 		//log.Printf("nothing to export")
-		return
+		return nil
 	}
 	//start_export := time.Now()
-	wg := sync.WaitGroup{}
+	eg := errgroup.Group{}
 
 	for account, md := range all {
-
 		mdd := *md
 		resources := 0
 		scopes := 0
@@ -82,50 +82,53 @@ func (cs *CheckState) exportMetrics() {
 				metrics += mdd.ResourceMetrics().At(i).ScopeMetrics().At(s).Metrics().Len()
 			}
 		}
-		tr := pmetricotlp.NewExportRequestFromMetrics(mdd)
 
-		wg.Add(1)
-		go func(account string, tr pmetricotlp.ExportRequest) {
-			cs.exportProtoRequest(account, tr)
-			wg.Done()
-		}(account, tr)
+		tr := pmetricotlp.NewExportRequestFromMetrics(mdd)
+		account := account
+
+		eg.Go(func() error {
+			return cs.exportProtoRequest(account, tr)
+		})
 		///log.Printf("exporting ", resources, scopes, metrics, account)
 
 	}
+
+	return eg.Wait()
 	//re := time.Since(start_export).String()
-	wg.Wait()
+	// wg.Wait()
 	//log.Printf("export job(%d) fininished in %s but requests in %s", len(all), re, time.Since(start_export).String())
 }
 
-func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRequest) {
-	defer func() {
+func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRequest) error {
+	/*defer func() {
 		if r := recover(); r != nil {
 			slog.Info("Recovered in f", slog.Any("r", r),
 				slog.String("account", account),
 				slog.String("tr", fmt.Sprintf("%v", tr)))
 		}
-	}()
+	}()*/
 	request, err := tr.MarshalProto()
 	if err != nil {
 		slog.Error("error with proto", slog.String("error", err.Error()))
-		return
+		return err
 	}
 	start := time.Now()
 	endpoint := strings.ReplaceAll(cs.captureEndpoint, "{ACC}", account)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint, bytes.NewReader(request))
 	if err != nil {
 		slog.Error("error while exporting metrics", slog.String("error", err.Error()))
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "application/x-protobuf")
 	req.Header.Set("User-Agent", "ncheck-agent")
 
-	resp, err := exportClient().Do(req)
+	resp, err := cs.exportClient.Do(req)
 	if err != nil {
 		slog.Error("error while exporting metrics", slog.String("duration",
 			time.Since(start).String()), slog.String("error", err.Error()))
-		return
+		return err
 	}
+	fmt.Println("#", resp.Body)
 	if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
 		// Request is successful.
 		body, err := io.ReadAll(resp.Body)
@@ -137,34 +140,13 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 		slog.Error("error exporting items", slog.String("duration", time.Since(start).String()),
 			slog.String("endpoint", endpoint),
 			slog.Int("status", resp.StatusCode), slog.String("body", string(body)))
-		return
+		return err
 	}
 	//slog.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
-
+	return nil
 }
 
-var _eclient *http.Client
-
-func exportClient() *http.Client {
-	if _eclient != nil {
-		return _eclient
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DisableCompression = false
-	transport.MaxIdleConns = 100
-	transport.ForceAttemptHTTP2 = true
-	transport.MaxIdleConnsPerHost = 50
-
-	clientTransport := (http.RoundTripper)(transport)
-
-	_eclient := &http.Client{
-		Transport: clientTransport,
-		Timeout:   120 * time.Second,
-	}
-	return _eclient
-}
-
-func (cs CheckState) finishCheckRequest(testStatus testStatus,
+func (cs *CheckState) finishCheckRequest(testStatus testStatus,
 	timers map[string]float64, attrs pcommon.Map) {
 	check := cs.check
 	testId := strconv.Itoa(check.Id) + "-" +
@@ -205,14 +187,14 @@ func (cs CheckState) finishCheckRequest(testStatus testStatus,
 	}
 }
 
-func (cs CheckState) finishTestRequest(opts map[string]interface{}) {
+func (cs *CheckState) finishTestRequest(opts map[string]interface{}) {
 	go func() {
 		c := cs.check
 		if c.CheckTestRequest.URL != "" {
 			_, _ = makeRequest(RequestOptions{
 				URL:     c.CheckTestRequest.URL,
 				Headers: c.CheckTestRequest.Headers,
-				Method:  "POST",
+				Method:  http.MethodPost,
 				Body:    opts,
 			})
 		}

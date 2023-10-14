@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"net/http"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -172,8 +173,6 @@ func (cs *CheckState) fire() {
 			protocolChecker.getTimers(),
 			protocolChecker.getAttrs())
 	}
-
-	return
 }
 
 type CheckState struct {
@@ -182,6 +181,7 @@ type CheckState struct {
 	captureEndpoint string
 	check           SyntheticsModelCustom
 	timerStop       func()
+	exportClient    httpClient
 }
 
 func newCheckState(check SyntheticsModelCustom,
@@ -191,8 +191,23 @@ func newCheckState(check SyntheticsModelCustom,
 		captureEndpoint: captureEndpoint,
 		check:           check,
 		timerStop:       nil,
+		exportClient: func() httpClient {
+			transport := http.DefaultTransport.(*http.Transport).Clone()
+			transport.DisableCompression = false
+			transport.MaxIdleConns = 100
+			transport.ForceAttemptHTTP2 = true
+			transport.MaxIdleConnsPerHost = 50
+
+			clientTransport := (http.RoundTripper)(transport)
+
+			return &http.Client{
+				Transport: clientTransport,
+				Timeout:   120 * time.Second,
+			}
+		}(),
 		//txnId: txnId,
 	}
+
 }
 
 var lock sync.Mutex

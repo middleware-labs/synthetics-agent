@@ -181,6 +181,7 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 		checker.testBody["headers"] = headers
 	}
 
+	checker.fillWSAssertions(httpResp, recMsg)
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
