@@ -19,7 +19,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	return m.response, m.err
 }
 
-func TestHTTPChecker_checkHTTPSingleStepRequest(t *testing.T) {
+func TestHTTPSingleStepRequest(t *testing.T) {
 	tests := []struct {
 		name        string
 		c           SyntheticsModelCustom

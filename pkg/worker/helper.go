@@ -80,16 +80,18 @@ type SyntheticsRequestOptions struct {
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
 }
 
+type HTTPMultiStepsRequest struct {
+	HTTPMethod  string               `json:"http_method"`
+	HTTPVersion string               `json:"http_version"`
+	HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
+	HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
+}
+
 type HTTPMultiStepsOptions struct {
 	StepName string               `json:"step_name"`
 	Endpoint string               `json:"endpoint"`
 	Expect   SyntheticsExpectMeta `json:"expect"`
-	Request  struct {
-		HTTPMethod  string               `json:"http_method"`
-		HTTPVersion string               `json:"http_version"`
-		HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
-		HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
-	} `json:"request"`
+	Request  HTTPMultiStepsRequest `json:"request"`
 }
 
 type SyntheticsTags struct {

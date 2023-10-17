@@ -14,11 +14,16 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 
 	isCheckTestReq := c.CheckTestRequest.URL != ""
 	scriptSnippet := CreateScriptSnippet(c)
-	respValue, exeErr := ExecK6Script(scriptSnippet)
+	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	response := make(map[string]interface{}, 0)
-	_ = json.Unmarshal([]byte(respValue), &response)
+	err := json.Unmarshal([]byte(respValue), &response)
+	if err != nil {
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error while parsing response: %v", err)
+		return testStatus
+	}
 
 	if isCheckTestReq {
 		resSteps := response["steps"]
@@ -32,19 +37,19 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 
 	if exeErr != nil {
 		testStatus.status = testStatusError
-		testStatus.msg = fmt.Sprintf("error while executing script %v", exeErr)
+		testStatus.msg = fmt.Sprintf("error while executing script: %v", exeErr)
 
 		checker.assertions = append(checker.assertions, map[string]string{
 			"type":   "status_code",
 			"reason": "Error while executing script",
 			"actual": "N/A",
-			"status": "FAIL",
+			"status": testStatusFail,
 		})
 		checker.assertions = append(checker.assertions, map[string]string{
 			"type":   "response_time",
 			"reason": "Error while executing script",
 			"actual": "N/A",
-			"status": "FAIL",
+			"status": testStatusFail,
 		})
 	} else {
 		if assertStep, ok := response["assertions"].(map[string]interface{}); ok {
@@ -65,7 +70,7 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) 
 					"type":   assert.Type,
 					"reason": "should be " + assert.Config.Operator + " " + assert.Config.Value,
 					"actual": "N/A",
-					"status": "FAIL",
+					"status": testStatusFail,
 				})
 			}
 		}

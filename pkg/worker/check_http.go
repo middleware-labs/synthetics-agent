@@ -34,6 +34,7 @@ type httpChecker struct {
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	attrs      pcommon.Map
+	k6Scripter k6Scripter
 }
 
 func newHTTPChecker(c SyntheticsModelCustom) (protocolChecker, error) {
@@ -67,7 +68,8 @@ func newHTTPChecker(c SyntheticsModelCustom) (protocolChecker, error) {
 			"tookMs":     "0 ms",
 			"body":       "",
 		},
-		attrs: pcommon.NewMap(),
+		attrs:      pcommon.NewMap(),
+		k6Scripter: &defaultK6Scripter{},
 	}, nil
 }
 
@@ -542,13 +544,9 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 func (checker *httpChecker) check() testStatus {
 	c := checker.c
-	testStatus := testStatus{
-		status: testStatusOK,
-	}
 
 	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
-		checker.checkHTTPMultiStepsRequest(c)
-		return testStatus
+		return checker.checkHTTPMultiStepsRequest(c)
 	}
 
 	return checker.checkHTTPSingleStepRequest()
