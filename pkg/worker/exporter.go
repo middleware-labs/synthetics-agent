@@ -100,13 +100,13 @@ func (cs *CheckState) exportMetrics() error {
 }
 
 func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRequest) error {
-	/*defer func() {
+	defer func() {
 		if r := recover(); r != nil {
 			slog.Info("Recovered in f", slog.Any("r", r),
 				slog.String("account", account),
 				slog.String("tr", fmt.Sprintf("%v", tr)))
 		}
-	}()*/
+	}()
 	request, err := tr.MarshalProto()
 	if err != nil {
 		slog.Error("error with proto", slog.String("error", err.Error()))
@@ -128,7 +128,7 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 			time.Since(start).String()), slog.String("error", err.Error()))
 		return err
 	}
-	fmt.Println("#", resp.Body)
+
 	if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
 		// Request is successful.
 		body, err := io.ReadAll(resp.Body)
@@ -137,9 +137,13 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 				slog.String("error", err.Error()))
 
 		}
+
 		slog.Error("error exporting items", slog.String("duration", time.Since(start).String()),
 			slog.String("endpoint", endpoint),
-			slog.Int("status", resp.StatusCode), slog.String("body", string(body)))
+			slog.Int("status", resp.StatusCode),
+			slog.String("body", string(body)),
+			slog.String("account key", cs.check.AccountKey),
+			slog.Any("check", cs.check))
 		return err
 	}
 	//slog.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
