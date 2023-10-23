@@ -43,7 +43,7 @@ func TestICMPChecker_check(t *testing.T) {
 	tests := []struct {
 		name        string
 		stats       *probing.Statistics
-		c           SyntheticsModelCustom
+		c           SyntheticCheck
 		pingerErr   error
 		wantDetails map[string]float64
 		status      string
@@ -51,7 +51,7 @@ func TestICMPChecker_check(t *testing.T) {
 	}{
 		{
 			name: "icmp check with no assertions",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -87,7 +87,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "pinger error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "127.0.0.1",
 					Request: SyntheticsRequestOptions{
@@ -127,7 +127,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "icmp check with latency assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "127.0.0.1",
 					Request: SyntheticsRequestOptions{
@@ -176,7 +176,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "icmp check with packet loss assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -225,7 +225,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "icmp check with packet received assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -273,7 +273,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "icmp check with multiple assertions",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -344,7 +344,7 @@ func TestICMPChecker_check(t *testing.T) {
 		},
 		{
 			name: "icmp check with latency assertion that fails",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -393,7 +393,7 @@ func TestICMPChecker_check(t *testing.T) {
 
 		{
 			name: "icmp check with multiple assertions with test request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					CheckTestRequest: CheckTestRequest{
 						URL: "http://example.com",
@@ -633,7 +633,7 @@ func TestICMPChecker_processICMPResponse(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		c          SyntheticsModelCustom
+		c          SyntheticCheck
 		testStatus testStatus
 		assertions []map[string]string
 		attrs      pcommon.Map
@@ -642,7 +642,7 @@ func TestICMPChecker_processICMPResponse(t *testing.T) {
 
 		{
 			name: "icmp response with testStatusOK and not test request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Request: SyntheticsRequestOptions{
@@ -690,7 +690,7 @@ func TestICMPChecker_processICMPResponse(t *testing.T) {
 
 		{
 			name: "icmp response with testStatusFail and not test request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Request: SyntheticsRequestOptions{

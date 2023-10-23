@@ -18,7 +18,7 @@ func (m *mockk6Scripter) execute(scriptSnippet string) (string, error) {
 func TestHTTPMultiStepRequest(t *testing.T) {
 	tests := []struct {
 		name           string
-		c              SyntheticsModelCustom
+		c              SyntheticCheck
 		k6Scripter     k6Scripter
 		wantStatus     testStatus
 		wantAssertions []map[string]string
@@ -26,7 +26,7 @@ func TestHTTPMultiStepRequest(t *testing.T) {
 	}{
 		{
 			name: "Test HTTP GET request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Request: SyntheticsRequestOptions{
 						HTTPMultiTest: true,
@@ -73,7 +73,7 @@ func TestHTTPMultiStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP MultiStep GET request error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Request: SyntheticsRequestOptions{
 						HTTPMultiTest: true,
@@ -121,7 +121,7 @@ func TestHTTPMultiStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP MultiStep GET request with test",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					CheckTestRequest: CheckTestRequest{
 						URL: "http://example.com",

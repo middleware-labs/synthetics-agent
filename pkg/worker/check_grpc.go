@@ -59,7 +59,7 @@ func buildCredentials(skipVerify bool, caCerts, clientCert, clientKey, serverNam
 	return credentials.NewTLS(&cfg), nil
 }
 
-func expandGRPCError(err error, c SyntheticsModelCustom) error {
+func expandGRPCError(err error, c SyntheticCheck) error {
 	if stat, ok := status.FromError(err); ok && stat.Code() == codes.Unimplemented {
 		return fmt.Errorf("error: this server does not implement the : %s", stat.Message())
 	} else if stat, ok := status.FromError(err); ok && stat.Code() == codes.DeadlineExceeded {
@@ -71,7 +71,7 @@ func expandGRPCError(err error, c SyntheticsModelCustom) error {
 	return err
 }
 
-func processGRPCError(testStatus testStatus, c SyntheticsModelCustom, timers map[string]float64) {
+func processGRPCError(testStatus testStatus, c SyntheticCheck, timers map[string]float64) {
 	assertions := make([]map[string]string, 0)
 	for _, a := range c.Request.Assertions.GRPC.Cases {
 		assertions = append(assertions, map[string]string{
@@ -90,7 +90,7 @@ func processGRPCError(testStatus testStatus, c SyntheticsModelCustom, timers map
 
 // check type grpc health
 func processGRPCHealthCheck(ctx context.Context, conn *grpc.ClientConn,
-	c SyntheticsModelCustom, timers map[string]float64) testStatus {
+	c SyntheticCheck, timers map[string]float64) testStatus {
 	var respHeaders metadata.MD
 	var respTrailers metadata.MD
 
@@ -127,7 +127,7 @@ func processGRPCHealthCheck(ctx context.Context, conn *grpc.ClientConn,
 
 // check type grpc behaviour
 func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
-	c SyntheticsModelCustom, timers map[string]float64) (metadata.MD, testStatus) {
+	c SyntheticCheck, timers map[string]float64) (metadata.MD, testStatus) {
 	var respHeaders metadata.MD
 	var respTrailers metadata.MD
 	testStatus := testStatus{
@@ -268,7 +268,7 @@ func processGRPCBehaviourCheck(ctx context.Context, conn *grpc.ClientConn,
 }
 
 type grpcChecker struct {
-	c            SyntheticsModelCustom
+	c            SyntheticCheck
 	respStr      string
 	respTrailers metadata.MD
 	timers       map[string]float64
@@ -277,7 +277,7 @@ type grpcChecker struct {
 	attrs        pcommon.Map
 }
 
-func newGRPCChecker(c SyntheticsModelCustom) protocolChecker {
+func newGRPCChecker(c SyntheticCheck) protocolChecker {
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",

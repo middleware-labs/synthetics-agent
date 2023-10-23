@@ -18,7 +18,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 	}
 	tests := []struct {
 		name            string
-		c               SyntheticsModelCustom
+		c               SyntheticCheck
 		inputTestStatus testStatus
 		wantTestStatus  testStatus
 		received        []byte
@@ -29,7 +29,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 	}{
 		{
 			name: "response_time assertion passes",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Request: SyntheticsRequestOptions{
@@ -72,7 +72,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 		},
 		{
 			name: "response_time assertion fails",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Request: SyntheticsRequestOptions{
 						Assertions: AssertionsOptions{
@@ -114,7 +114,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 		},
 		{
 			name: "receive_message assertion passes",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Request: SyntheticsRequestOptions{
 						Assertions: AssertionsOptions{
@@ -157,7 +157,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 		},
 		{
 			name: "receive_message assertion fails",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Request: SyntheticsRequestOptions{
@@ -314,13 +314,13 @@ func (m *mockUDPNetHelper) setUDPReadDeadline(conn *net.UDPConn, t time.Time) er
 func TestUDPChecker_check(t *testing.T) {
 	tests := []struct {
 		name      string
-		c         SyntheticsModelCustom
+		c         SyntheticCheck
 		netHelper udpNetHelper
 		expected  testStatus
 	}{
 		{
 			name: "resolveUDPAddr error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",
@@ -346,7 +346,7 @@ func TestUDPChecker_check(t *testing.T) {
 
 		{
 			name: "dialUDP error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",
@@ -372,7 +372,7 @@ func TestUDPChecker_check(t *testing.T) {
 
 		{
 			name: "write udp message error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",
@@ -398,7 +398,7 @@ func TestUDPChecker_check(t *testing.T) {
 
 		{
 			name: "set UDP read deadline error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",
@@ -424,7 +424,7 @@ func TestUDPChecker_check(t *testing.T) {
 
 		{
 			name: "read UDP message error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",
@@ -450,7 +450,7 @@ func TestUDPChecker_check(t *testing.T) {
 
 		{
 			name: "check success",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "example.com",

@@ -28,14 +28,14 @@ func TestTCPChecker_check(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		c          SyntheticsModelCustom
+		c          SyntheticCheck
 		netter     netter
 		want       testStatus
 		wantErrMsg string
 	}{
 		{
 			name: "OK",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -64,7 +64,7 @@ func TestTCPChecker_check(t *testing.T) {
 		},
 		{
 			name: "DNSResolutionError",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -93,7 +93,7 @@ func TestTCPChecker_check(t *testing.T) {
 		},
 		{
 			name: "ConnectionError",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -121,7 +121,7 @@ func TestTCPChecker_check(t *testing.T) {
 		},
 		{
 			name: "ConnectionTimeout",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{

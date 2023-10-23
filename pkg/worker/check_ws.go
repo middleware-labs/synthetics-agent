@@ -18,17 +18,46 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+type tlsDialer interface {
+	GetDialContext(ctx context.Context, network, addr string) (net.Conn, error)
+	Dial(network, addr string) (net.Conn, error)
+}
+
+type defaultTLSDialer struct {
+	dialer *tls.Dialer
+}
+
+func (d *defaultTLSDialer) GetDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	return d.dialer.NetDialer.DialContext(ctx, network, addr)
+}
+
+func (d *defaultTLSDialer) Dial(network, addr string) (net.Conn, error) {
+	return d.dialer.Dial(network, addr)
+}
+
 type wsChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
+	tlsDialer  tlsDialer
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
 	attrs      pcommon.Map
 }
 
-func newWSChecker(c SyntheticsModelCustom) protocolChecker {
+func newWSChecker(c SyntheticCheck) protocolChecker {
 	return &wsChecker{
 		c: c,
+		tlsDialer: &defaultTLSDialer{
+			dialer: &tls.Dialer{
+				NetDialer: &net.Dialer{
+					Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
+					Resolver: &net.Resolver{
+						PreferGo: true,
+					},
+				},
+			},
+		},
+
 		timers: map[string]float64{
 			"duration":         0,
 			"dns":              0,
@@ -58,15 +87,6 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 		slog.Error("root certificates error", slog.String("error", rtErr.Error()))
 		return nil
 	}
-	netDialer := &net.Dialer{
-		Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
-		Resolver: &net.Resolver{
-			PreferGo: true,
-		},
-	}
-	tlsDialer := &tls.Dialer{
-		NetDialer: netDialer,
-	}
 
 	return &websocket.Dialer{
 		HandshakeTimeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
@@ -78,7 +98,13 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 			addr string) (net.Conn, error) {
 			dnsStart := time.Now()
 
-			dialConn, dcErr := netDialer.DialContext(ctx, network, addr)
+			/*dialConn, dcErr := netDialer.DialContext(ctx, network, addr)
+			if dcErr != nil {
+				checker.timers["dns"] = timeInMs(time.Since(dnsStart))
+				return nil, dcErr
+			}*/
+
+			dialConn, dcErr := checker.tlsDialer.GetDialContext(ctx, network, addr)
 			if dcErr != nil {
 				checker.timers["dns"] = timeInMs(time.Since(dnsStart))
 				return nil, dcErr
@@ -87,7 +113,8 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 			dnsDuration := time.Since(dnsStart)
 			checker.timers["dns"] = timeInMs(dnsDuration)
 
-			tlsConn, tlsErr := tlsDialer.Dial(network, dialConn.RemoteAddr().String())
+			//tlsConn, tlsErr := tlsDialer.Dial(network, dialConn.RemoteAddr().String())
+			tlsConn, tlsErr := checker.tlsDialer.Dial(network, dialConn.RemoteAddr().String())
 			if tlsErr != nil {
 				_ = dialConn.Close()
 				return nil, tlsErr

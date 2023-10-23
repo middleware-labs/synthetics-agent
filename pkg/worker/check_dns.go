@@ -160,7 +160,7 @@ func lookupCNAME(ctx context.Context, endpoint string,
 }
 
 type dnsChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	lookup     []map[string]string
 	resolver   resolver
 	timers     map[string]float64
@@ -169,7 +169,7 @@ type dnsChecker struct {
 	attrs      pcommon.Map
 }
 
-func newDNSChecker(c SyntheticsModelCustom) protocolChecker {
+func newDNSChecker(c SyntheticCheck) protocolChecker {
 	return &dnsChecker{
 		c:      c,
 		lookup: make([]map[string]string, 0),

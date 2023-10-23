@@ -200,7 +200,7 @@ func TestExportProtoRequest(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cs := newCheckState(SyntheticsModelCustom{}, "us-east-1", tt.captureEndpoint)
+			cs := newCheckState(SyntheticCheck{}, "us-east-1", tt.captureEndpoint)
 			if tt.exportClient != nil {
 				cs.exportClient = tt.exportClient
 			}

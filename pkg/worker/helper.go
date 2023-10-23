@@ -207,17 +207,20 @@ type GRPCPayloadOptions struct {
 type UDPPayloadOptions struct {
 	Message string `json:"message"`
 }
+type WSPayloadHeaders struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type WSPayloadAuthentication struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
 
 type WSPayloadOptions struct {
-	Message string `json:"message"`
-	Headers []struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	} `json:"headers"`
-	Authentication struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	} `json:"authentication"`
+	Message        string                  `json:"message"`
+	Headers        []WSPayloadHeaders      `json:"headers"`
+	Authentication WSPayloadAuthentication `json:"authentication"`
 }
 
 type SpecifyFrequencyOptions struct {

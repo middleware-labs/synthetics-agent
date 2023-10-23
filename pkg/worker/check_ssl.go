@@ -14,14 +14,14 @@ import (
 )
 
 type sslChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
 	attrs      pcommon.Map
 }
 
-func newSSLChecker(c SyntheticsModelCustom) protocolChecker {
+func newSSLChecker(c SyntheticCheck) protocolChecker {
 	return &sslChecker{
 		c: c,
 		timers: map[string]float64{

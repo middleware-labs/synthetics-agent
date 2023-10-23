@@ -142,7 +142,7 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 				slog.Info("unsubscribed", slog.String("key", msg.Key))
 				delete(messages, msg.Key)
 			}
-			w.removeCheckState(&SyntheticsModelCustom{
+			w.removeCheckState(&SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					AccountUID: v.AccountUID,
 					Action:     v.Action,
@@ -200,7 +200,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			continue
 		}
 
-		v := SyntheticsModelCustom{}
+		v := SyntheticCheck{}
 
 		err = json.Unmarshal(msg.Payload, &v)
 		if err != nil {

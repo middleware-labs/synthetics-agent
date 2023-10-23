@@ -27,7 +27,7 @@ type httpClient interface {
 }
 
 type httpChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	client     httpClient
 	assertions []map[string]string
 	timestamps map[string]int64
@@ -37,7 +37,7 @@ type httpChecker struct {
 	k6Scripter k6Scripter
 }
 
-func newHTTPChecker(c SyntheticsModelCustom) (protocolChecker, error) {
+func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
 	parsedURL, err := url.Parse(c.Endpoint)
 	if err != nil {
 		return nil, err
@@ -168,7 +168,7 @@ func (checker *httpChecker) processHTTPError(testStatus testStatus) {
 	checker.processHTTPResponse()
 }
 
-func getHTTPClient(c SyntheticsModelCustom) httpClient {
+func getHTTPClient(c SyntheticCheck) httpClient {
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{

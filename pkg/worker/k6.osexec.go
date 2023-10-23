@@ -107,7 +107,7 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 	return respValue, nil
 }
 
-func CreateScriptSnippet(req SyntheticsModelCustom) string {
+func CreateScriptSnippet(req SyntheticCheck) string {
 
 	k6Script := `
 

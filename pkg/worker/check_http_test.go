@@ -22,7 +22,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 func TestHTTPSingleStepRequest(t *testing.T) {
 	tests := []struct {
 		name        string
-		c           SyntheticsModelCustom
+		c           SyntheticCheck
 		httpClient  httpClient
 		httpHandler http.HandlerFunc
 		wantStatus  testStatus
@@ -30,7 +30,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "http://127.0.0.1",
 					Request: SyntheticsRequestOptions{
@@ -54,7 +54,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request auth failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "http://127.0.0.1",
 					Request: SyntheticsRequestOptions{
@@ -80,7 +80,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request with body assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -165,7 +165,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with invalid body assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -203,7 +203,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request with body hash assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -279,7 +279,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with invalid body hash assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -319,7 +319,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with header assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -409,7 +409,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with invalid header assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -449,7 +449,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with response time assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -500,7 +500,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request with invalid reponse time assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -538,7 +538,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request with status code assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -599,7 +599,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request with invalid status code assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -637,7 +637,7 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request with failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 
 					Endpoint: "http://127.0.0.1",
@@ -739,14 +739,14 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 func TestBuildHttpRequest(t *testing.T) {
 	tests := []struct {
 		name       string
-		c          SyntheticsModelCustom
+		c          SyntheticCheck
 		httpClient httpClient
 		method     string
 		errMsg     string
 	}{
 		{
 			name: "Test HTTP GET request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "https://example.com",
 					Request: SyntheticsRequestOptions{
@@ -795,7 +795,7 @@ func TestBuildHttpRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP POST request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "https://example.com",
 					Request: SyntheticsRequestOptions{
@@ -846,7 +846,7 @@ func TestBuildHttpRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP PUT request",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "https://example.com",
 					Request: SyntheticsRequestOptions{
@@ -897,7 +897,7 @@ func TestBuildHttpRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP request with invalid method",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "%",
 					Request: SyntheticsRequestOptions{
@@ -947,7 +947,7 @@ func TestBuildHttpRequest(t *testing.T) {
 		},
 		{
 			name: "Test HTTP GET request http client error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "https://example.com",
 					Request: SyntheticsRequestOptions{
@@ -1002,7 +1002,7 @@ func TestBuildHttpRequest(t *testing.T) {
 
 		{
 			name: "Test HTTP GET request status code should be unauthorized",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "https://example.com",
 					Request: SyntheticsRequestOptions{

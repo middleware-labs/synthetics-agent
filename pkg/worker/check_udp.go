@@ -11,7 +11,7 @@ import (
 )
 
 type udpChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
@@ -24,7 +24,7 @@ const (
 	udpStatusFailed     = "failed"
 )
 
-func newUDPChecker(c SyntheticsModelCustom) protocolChecker {
+func newUDPChecker(c SyntheticCheck) protocolChecker {
 	return &udpChecker{
 		c: c,
 		timers: map[string]float64{

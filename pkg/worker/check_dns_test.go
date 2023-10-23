@@ -45,7 +45,7 @@ func (r *mockResolver) LookupCNAME(ctx context.Context, host string) (string, er
 func TestDNSFillAssertions(t *testing.T) {
 	tests := []struct {
 		name     string
-		c        SyntheticsModelCustom
+		c        SyntheticCheck
 		resolver *mockResolver
 		ips      []net.IP
 		want     testStatus
@@ -53,7 +53,7 @@ func TestDNSFillAssertions(t *testing.T) {
 	}{
 		{
 			name: "DNS response time assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -88,7 +88,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS every available record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -124,7 +124,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS at least one record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -160,7 +160,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS CNAME record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -202,7 +202,7 @@ func TestDNSFillAssertions(t *testing.T) {
 
 		{
 			name: "DNS CNAME record assertion failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -243,7 +243,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS CNAME record assertion resolver error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -287,7 +287,7 @@ func TestDNSFillAssertions(t *testing.T) {
 
 		{
 			name: "DNS MX record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -332,7 +332,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS MX record assertion failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -378,7 +378,7 @@ func TestDNSFillAssertions(t *testing.T) {
 
 		{
 			name: "DNS MX record resolver error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -426,7 +426,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS NS record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 
@@ -472,7 +472,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS NS record resolver error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 
@@ -521,7 +521,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS NS record assertion failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 
@@ -568,7 +568,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS TXT record assertion",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -612,7 +612,7 @@ func TestDNSFillAssertions(t *testing.T) {
 
 		{
 			name: "DNS TXT record assertion failure",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{
@@ -655,7 +655,7 @@ func TestDNSFillAssertions(t *testing.T) {
 		},
 		{
 			name: "DNS TXT record resolver error",
-			c: SyntheticsModelCustom{
+			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Endpoint: "example.com",
 					Request: SyntheticsRequestOptions{

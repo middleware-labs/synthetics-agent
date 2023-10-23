@@ -32,7 +32,7 @@ func (d *defaultNetter) connClose(conn net.Conn) error {
 }
 
 type tcpChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
@@ -40,7 +40,7 @@ type tcpChecker struct {
 	netter     netter
 }
 
-func newTCPChecker(c SyntheticsModelCustom) protocolChecker {
+func newTCPChecker(c SyntheticCheck) protocolChecker {
 	return &tcpChecker{
 		c: c,
 		timers: map[string]float64{

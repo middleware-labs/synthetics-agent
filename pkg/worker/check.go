@@ -14,9 +14,13 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+<<<<<<< HEAD
 //var _checks map[string]*CheckState = map[string]*CheckState{}
 
 type SyntheticsModelCustom struct {
+=======
+type SyntheticCheck struct {
+>>>>>>> de8d027 (rename SyntheticModelCustom to SyntheticChecks)
 	Uid string
 	//Not string
 	SyntheticsModel
@@ -43,7 +47,7 @@ var (
 	testStatusPass   string = "PASS"
 )
 
-func getProtocolChecker(c SyntheticsModelCustom) (protocolChecker, error) {
+func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 
 	switch c.Proto {
 	case "http":
@@ -181,12 +185,12 @@ type CheckState struct {
 	//txnId     string
 	location        string
 	captureEndpoint string
-	check           SyntheticsModelCustom
+	check           SyntheticCheck
 	timerStop       func()
 	exportClient    httpClient
 }
 
-func newCheckState(check SyntheticsModelCustom,
+func newCheckState(check SyntheticCheck,
 	location string, captureEndpoint string) *CheckState {
 	return &CheckState{
 		location:        location,
@@ -214,7 +218,7 @@ func newCheckState(check SyntheticsModelCustom,
 
 var lock sync.Mutex
 
-func (w *Worker) removeCheckState(check *SyntheticsModelCustom) {
+func (w *Worker) removeCheckState(check *SyntheticCheck) {
 	lock.Lock()
 	defer lock.Unlock()
 	check.Uid = check.AccountUID + "_" + strconv.Itoa(check.Id)
@@ -224,7 +228,7 @@ func (w *Worker) removeCheckState(check *SyntheticsModelCustom) {
 		delete(w._checks, check.Uid)
 	}
 }
-func (w *Worker) getCheckState(check SyntheticsModelCustom) *CheckState {
+func (w *Worker) getCheckState(check SyntheticCheck) *CheckState {
 	lock.Lock()
 	defer lock.Unlock()
 	check.Uid = check.AccountUID + "_" + strconv.Itoa(check.Id)

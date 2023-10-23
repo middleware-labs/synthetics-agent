@@ -57,7 +57,7 @@ func (p *icmpPinger) SetRecordRtts(recordRtts bool) {
 }
 
 type icmpChecker struct {
-	c          SyntheticsModelCustom
+	c          SyntheticCheck
 	details    map[string]float64
 	timers     map[string]float64
 	testBody   map[string]interface{}
@@ -66,7 +66,7 @@ type icmpChecker struct {
 	pinger     pinger
 }
 
-func getDefaultPinger(c SyntheticsModelCustom) (*icmpPinger, error) {
+func getDefaultPinger(c SyntheticCheck) (*icmpPinger, error) {
 	pinger, err := probing.NewPinger(c.Endpoint)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func getDefaultPinger(c SyntheticsModelCustom) (*icmpPinger, error) {
 	return &icmpPinger{Pinger: pinger}, nil
 }
 
-func newICMPChecker(c SyntheticsModelCustom, pinger pinger) protocolChecker {
+func newICMPChecker(c SyntheticCheck, pinger pinger) protocolChecker {
 	return &icmpChecker{
 		c: c,
 		details: map[string]float64{

@@ -90,11 +90,11 @@ func TestBuildCredentials(t *testing.T) {
 	}
 }
 func TestProcessGRPCError(t *testing.T) {
-	c := SyntheticsModelCustom{
-		Request: SyntheticsModelCustomRequest{
-			Assertions: SyntheticsModelCustomRequestAssertions{
-				GRPC: SyntheticsModelCustomRequestAssertionsGRPC{
-					Cases: []SyntheticsModelCustomRequestAssertionsGRPCCase{
+	c := SyntheticCheck{
+		Request: SyntheticCheckRequest{
+			Assertions: SyntheticCheckRequestAssertions{
+				GRPC: SyntheticCheckRequestAssertionsGRPC{
+					Cases: []SyntheticCheckRequestAssertionsGRPCCase{
 						{
 							Type: "some_type",
 						},
@@ -164,13 +164,13 @@ func TestProcessGRPCHealthCheck(t *testing.T) {
 
 	// Set up a test case
 	ctx := context.Background()
-	c := SyntheticsModelCustom{
-		Expect: SyntheticsModelCustomExpect{
+	c := SyntheticCheck{
+		Expect: SyntheticCheckExpect{
 			ResponseTimeLessThen: 5,
 		},
-		Request: SyntheticsModelCustomRequest{
-			GRPCPayload: SyntheticsModelCustomRequestGRPCPayload{
-				Metadata: []SyntheticsModelCustomRequestGRPCPayloadMetadata{
+		Request: SyntheticCheckRequest{
+			GRPCPayload: SyntheticCheckRequestGRPCPayload{
+				Metadata: []SyntheticCheckRequestGRPCPayloadMetadata{
 					{Name: "foo", Value: "bar"},
 				},
 			},
@@ -240,14 +240,14 @@ func TestProcessGRPCBehaviourCheck(t *testing.T) {
 
 	// Set up the test case
 	ctx := context.Background()
-	c := SyntheticsModelCustom{
-		Request: SyntheticsModelCustomRequest{
-			GRPCPayload: SyntheticsModelCustomRequestGRPCPayload{
+	c := SyntheticCheck{
+		Request: SyntheticCheckRequest{
+			GRPCPayload: SyntheticCheckRequestGRPCPayload{
 				ServiceDefinition: "mock.MockService",
 				MethodSelection:   "Echo",
 				Message:           `{"value": "hello"}`,
 			},
-			Expect: SyntheticsModelCustomRequestExpect{
+			Expect: SyntheticCheckRequestExpect{
 				ResponseTimeLessThen: 5,
 			},
 		},

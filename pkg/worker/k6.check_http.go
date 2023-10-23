@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticsModelCustom) testStatus {
+func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testStatus {
 	start := time.Now()
 	testStatus := testStatus{
 		status: testStatusOK,
