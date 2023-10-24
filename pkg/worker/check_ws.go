@@ -18,10 +18,11 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
-type tlsDialer interface {
-	GetDialContext(ctx context.Context, network, addr string) (net.Conn, error)
-	Dial(network, addr string) (net.Conn, error)
-}
+const (
+	assertTypeWSResponseTime string = "response_time"
+	assertTypeWSRecvMessage  string = "received_message"
+	assertTypeWSHeader       string = "header"
+)
 
 type defaultTLSDialer struct {
 	dialer *tls.Dialer
@@ -37,7 +38,7 @@ func (d *defaultTLSDialer) Dial(network, addr string) (net.Conn, error) {
 
 type wsChecker struct {
 	c          SyntheticCheck
-	tlsDialer  tlsDialer
+	wsDialer   *websocket.Dialer
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
@@ -45,27 +46,21 @@ type wsChecker struct {
 }
 
 func newWSChecker(c SyntheticCheck) protocolChecker {
-	return &wsChecker{
-		c: c,
-		tlsDialer: &defaultTLSDialer{
-			dialer: &tls.Dialer{
-				NetDialer: &net.Dialer{
-					Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
-					Resolver: &net.Resolver{
-						PreferGo: true,
-					},
-				},
-			},
-		},
 
-		timers: map[string]float64{
-			"duration":         0,
-			"dns":              0,
-			"connect":          0,
-			"ssl":              0,
-			"ws.write_message": 0,
-			"ws.read_message":  0,
-		},
+	timers := map[string]float64{
+		"duration":         0,
+		"dns":              0,
+		"connect":          0,
+		"ssl":              0,
+		"ws.write_message": 0,
+		"ws.read_message":  0,
+	}
+
+	return &wsChecker{
+		c:        c,
+		wsDialer: getWSDialer(c, timers),
+
+		timers: timers,
 		testBody: map[string]interface{}{
 			"url":              c.Endpoint,
 			"host":             "N/A",
@@ -80,12 +75,22 @@ func newWSChecker(c SyntheticCheck) protocolChecker {
 	}
 }
 
-func (checker *wsChecker) getWSDialer() *websocket.Dialer {
-	c := checker.c
+func getWSDialer(c SyntheticCheck, timers map[string]float64) *websocket.Dialer {
 	roots, rtErr := x509.SystemCertPool()
 	if rtErr != nil {
 		slog.Error("root certificates error", slog.String("error", rtErr.Error()))
 		return nil
+	}
+
+	tlsDialer := &defaultTLSDialer{
+		dialer: &tls.Dialer{
+			NetDialer: &net.Dialer{
+				Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
+				Resolver: &net.Resolver{
+					PreferGo: true,
+				},
+			},
+		},
 	}
 
 	return &websocket.Dialer{
@@ -98,30 +103,23 @@ func (checker *wsChecker) getWSDialer() *websocket.Dialer {
 			addr string) (net.Conn, error) {
 			dnsStart := time.Now()
 
-			/*dialConn, dcErr := netDialer.DialContext(ctx, network, addr)
+			dialConn, dcErr := tlsDialer.GetDialContext(ctx, network, addr)
 			if dcErr != nil {
-				checker.timers["dns"] = timeInMs(time.Since(dnsStart))
-				return nil, dcErr
-			}*/
-
-			dialConn, dcErr := checker.tlsDialer.GetDialContext(ctx, network, addr)
-			if dcErr != nil {
-				checker.timers["dns"] = timeInMs(time.Since(dnsStart))
+				timers["dns"] = timeInMs(time.Since(dnsStart))
 				return nil, dcErr
 			}
 
 			dnsDuration := time.Since(dnsStart)
-			checker.timers["dns"] = timeInMs(dnsDuration)
+			timers["dns"] = timeInMs(dnsDuration)
 
-			//tlsConn, tlsErr := tlsDialer.Dial(network, dialConn.RemoteAddr().String())
-			tlsConn, tlsErr := checker.tlsDialer.Dial(network, dialConn.RemoteAddr().String())
+			tlsConn, tlsErr := tlsDialer.Dial(network, dialConn.RemoteAddr().String())
 			if tlsErr != nil {
 				_ = dialConn.Close()
 				return nil, tlsErr
 			}
 
 			sslDuration := timeInMs(time.Since(dnsStart) - dnsDuration)
-			checker.timers["ssl"] = sslDuration
+			timers["ssl"] = sslDuration
 
 			return tlsConn, nil
 		},
@@ -139,7 +137,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 		ck := make(map[string]string)
 		ck["type"] = strings.ReplaceAll(assert.Type, "_", " ")
 		switch assert.Type {
-		case "response_time":
+		case assertTypeWSResponseTime:
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + fmt.Sprintf("%v", assert.Config.Value)
 			if !assertInt(int64(checker.timers["duration"]), assert) {
@@ -152,7 +150,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 				ck["reason"] = "response time matched with the condition"
 			}
 			checker.assertions = append(checker.assertions, ck)
-		case "received_message":
+		case assertTypeWSRecvMessage:
 			ck["actual"] = recMsg
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
 			if !assertString(recMsg, assert) {
@@ -166,7 +164,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			}
 			checker.assertions = append(checker.assertions, ck)
 
-		case "header":
+		case assertTypeWSHeader:
 			if httpResp != nil && len(httpResp.Header) > 0 {
 				vl := httpResp.Header.Get(assert.Config.Target)
 				ck["actual"] = vl
@@ -208,7 +206,9 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 		checker.testBody["headers"] = headers
 	}
 
-	checker.fillWSAssertions(httpResp, recMsg)
+	tStatus := checker.fillWSAssertions(httpResp, recMsg)
+	testStatus.status = tStatus.status
+	testStatus.msg = tStatus.msg
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
@@ -219,14 +219,14 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 
 	assertions := make([]map[string]interface{}, 0)
 	assertions = append(assertions, map[string]interface{}{
-		"type": "response_time",
+		"type": assertTypeWSResponseTime,
 		"config": map[string]string{
 			"operator": "is",
 			"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 		},
 	})
 	assertions = append(assertions, map[string]interface{}{
-		"type": "received_message",
+		"type": assertTypeWSRecvMessage,
 		"config": map[string]string{
 			"operator": "is",
 			"value":    recMsg,
@@ -246,8 +246,6 @@ func (checker *wsChecker) check() testStatus {
 		status: testStatusOK,
 	}
 
-	wsDialer := checker.getWSDialer()
-
 	headers := make(http.Header)
 	for _, v := range c.Request.WSPayload.Headers {
 		headers.Set(v.Name, v.Value)
@@ -258,7 +256,7 @@ func (checker *wsChecker) check() testStatus {
 		)))
 	}
 
-	conn, httpResp, err := wsDialer.Dial(c.Endpoint, headers)
+	conn, httpResp, err := checker.wsDialer.Dial(c.Endpoint, headers)
 	if httpResp != nil {
 		checker.testBody["version"] = httpResp.Proto
 	}
@@ -330,7 +328,7 @@ func (checker *wsChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *wsChecker) getTestBody() map[string]interface{} {
+func (checker *wsChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
 }
 

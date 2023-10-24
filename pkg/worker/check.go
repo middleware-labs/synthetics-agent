@@ -14,13 +14,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
-<<<<<<< HEAD
-//var _checks map[string]*CheckState = map[string]*CheckState{}
-
-type SyntheticsModelCustom struct {
-=======
 type SyntheticCheck struct {
->>>>>>> de8d027 (rename SyntheticModelCustom to SyntheticChecks)
 	Uid string
 	//Not string
 	SyntheticsModel
@@ -30,8 +24,7 @@ type protocolChecker interface {
 	check() testStatus
 	getTimers() map[string]float64
 	getAttrs() pcommon.Map
-	getTestBody() map[string]interface{}
-	getDetails() map[string]float64
+	getTestResponseBody() map[string]interface{}
 }
 
 type testStatus struct {
@@ -40,11 +33,10 @@ type testStatus struct {
 }
 
 var (
-	testStatusOK     string = "OK"
-	testStatusFail   string = "FAIL"
-	testStatusFailed string = "FAILED"
-	testStatusError  string = "ERROR"
-	testStatusPass   string = "PASS"
+	testStatusOK    string = "OK"
+	testStatusFail  string = "FAIL"
+	testStatusError string = "ERROR"
+	testStatusPass  string = "PASS"
 )
 
 func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
@@ -173,7 +165,7 @@ func (cs *CheckState) fire() {
 
 	isTestReq := c.CheckTestRequest.URL != ""
 	if isTestReq {
-		cs.finishTestRequest(protocolChecker.getTestBody())
+		cs.finishTestRequest(protocolChecker.getTestResponseBody())
 	} else {
 		cs.finishCheckRequest(testStatus,
 			protocolChecker.getTimers(),
@@ -182,7 +174,6 @@ func (cs *CheckState) fire() {
 }
 
 type CheckState struct {
-	//txnId     string
 	location        string
 	captureEndpoint string
 	check           SyntheticCheck

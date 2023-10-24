@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func TestUDPChecker_processUDPResponse(t *testing.T) {
+func TestUDPProcessUDPResponse(t *testing.T) {
 	type assertions struct {
 		actual string
 		reason string
@@ -264,7 +264,7 @@ func TestUDPChecker_processUDPResponse(t *testing.T) {
 				}
 			}
 
-			testBody := checker.getTestBody()
+			testBody := checker.getTestResponseBody()
 
 			tookMs := testBody["tookMs"].(string)
 			actualTookMs := fmt.Sprintf("%.2f ms", checker.timers["duration"])
@@ -311,7 +311,7 @@ func (m *mockUDPNetHelper) setUDPReadDeadline(conn *net.UDPConn, t time.Time) er
 	return m.setReadDeadlineErr
 }
 
-func TestUDPChecker_check(t *testing.T) {
+func TestUDPCheck(t *testing.T) {
 	tests := []struct {
 		name      string
 		c         SyntheticCheck

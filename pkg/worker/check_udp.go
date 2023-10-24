@@ -10,6 +10,11 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	assertTypeUDPResponseTime string = "response_time"
+	assertTypeUDPRecvMessage  string = "receive_message"
+)
+
 type udpChecker struct {
 	c          SyntheticCheck
 	timers     map[string]float64
@@ -64,7 +69,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ")
 
 			switch assert.Type {
-			case "response_time":
+			case assertTypeUDPResponseTime:
 				dur := checker.timers["duration"]
 				ck["actual"] = fmt.Sprintf("%v", dur)
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
@@ -77,7 +82,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 					testStatus.msg = "assert failed, response_time didn't matched"
 				}
 
-			case "receive_message":
+			case assertTypeUDPRecvMessage:
 				ck["actual"] = "Matched"
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 					" " + assert.Config.Value
@@ -103,7 +108,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 	testBody := make(map[string]interface{})
 	testBody["assertions"] = []map[string]interface{}{
 		{
-			"type": "response_time",
+			"type": assertTypeUDPResponseTime,
 			"config": map[string]string{
 				"operator": "is",
 				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
@@ -242,7 +247,7 @@ func (checker *udpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *udpChecker) getTestBody() map[string]interface{} {
+func (checker *udpChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
 }
 

@@ -353,7 +353,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 	testBody := make(map[string]interface{}, 0)
 	asr := []map[string]interface{}{
 		{
-			"type": "response_time",
+			"type": assertTypeDNSResponseTime,
 			"config": map[string]string{
 				"operator": "is",
 				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
@@ -364,7 +364,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 	for _, v := range ips {
 		if len(v) == net.IPv6len {
 			asr = append(asr, map[string]interface{}{
-				"type": "at_least_one_record",
+				"type": assertTypeDNSAtLeastOneRecord,
 				"config": map[string]string{
 					"operator": "is",
 					"value":    v.String(),
@@ -382,7 +382,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 			})
 
 			asr = append(asr, map[string]interface{}{
-				"type": "at_least_one_record",
+				"type": assertTypeDNSAtLeastOneRecord,
 				"config": map[string]string{
 					"operator": "is",
 					"value":    v.String(),
@@ -405,7 +405,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 	testBody["headers"] = checker.lookup
 	testBody["assertions"] = asr
 	testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	// finishTestRequest(c, testBody)
+	checker.testBody = testBody
 }
 
 func (checker *dnsChecker) check() testStatus {
@@ -445,10 +445,6 @@ func (checker *dnsChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *dnsChecker) getTestBody() map[string]interface{} {
+func (checker *dnsChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
-}
-
-func (checker *dnsChecker) getDetails() map[string]float64 {
-	return nil
 }

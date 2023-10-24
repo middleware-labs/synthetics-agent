@@ -66,12 +66,8 @@ func (checker *traceRouteChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *traceRouteChecker) getTestBody() map[string]interface{} {
+func (checker *traceRouteChecker) getTestResponseBody() map[string]interface{} {
 	return map[string]interface{}{}
-}
-
-func (checker *traceRouteChecker) getDetails() map[string]float64 {
-	return map[string]float64{}
 }
 
 func (checker *traceRouteChecker) check() testStatus {

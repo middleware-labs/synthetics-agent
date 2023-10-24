@@ -10,6 +10,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	assertTypeICMPLatency    string = "latency"
+	assertTypeICMPPacketLoss string = "packet_loss"
+	assertTypeICMPPacketRecv string = "packet_received"
+)
+
 type pinger interface {
 	Run() error
 	Statistics() *probing.Statistics
@@ -126,21 +132,21 @@ func (checker *icmpChecker) processICMPResponse(testStatus testStatus) {
 	if c.CheckTestRequest.URL != "" {
 		checker.testBody["assertions"] = []map[string]interface{}{
 			{
-				"type": "latency",
+				"type": assertTypeICMPLatency,
 				"config": map[string]interface{}{
 					"operator": "less_than",
 					"value":    checker.timers["duration"],
 				},
 			},
 			{
-				"type": "packet_loss",
+				"type": assertTypeICMPPacketLoss,
 				"config": map[string]interface{}{
 					"operator": "less_than",
 					"value":    checker.timers["packet_loss"],
 				},
 			},
 			{
-				"type": "packet_received",
+				"type": assertTypeICMPPacketRecv,
 				"config": map[string]interface{}{
 					"operator": "less_than",
 					"value":    checker.timers["packet_recv"],
@@ -212,11 +218,11 @@ func (checker *icmpChecker) check() testStatus {
 
 	if c.Expect.LatencyLimit > 0 && c.Expect.LatencyLimit <= checker.timers["rtt"] {
 		// TODO revisit testStatusFailed
-		testStatus.status = testStatusFailed
+		testStatus.status = testStatusFail
 		testStatus.msg = fmt.Sprintf("latency higher then expected %s", c.Endpoint)
 	} else if c.Expect.PacketLossLimit > 0 && c.Expect.PacketLossLimit <= stats.PacketLoss {
 		// TODO revisit testStatusFailed
-		testStatus.status = testStatusFailed
+		testStatus.status = testStatusFail
 		testStatus.msg = fmt.Sprintf("packet loss higher then expected %s", c.Endpoint)
 	}
 
@@ -228,30 +234,30 @@ func (checker *icmpChecker) check() testStatus {
 			" " + v.Config.Value
 
 		switch v.Type {
-		case "latency":
+		case assertTypeICMPLatency:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["rtt"])
 			if !assertInt(int64(checker.timers["duration"]), v) {
 				ck["status"] = testStatusFail
-				testStatus.status = testStatusFailed
+				testStatus.status = testStatusFail
 				testStatus.msg = fmt.Sprintf("latency didn't matched %s", c.Endpoint)
 			}
 
 			checker.assertions = append(checker.assertions, ck)
-		case "packet_loss":
+		case assertTypeICMPPacketLoss:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_loss"])
 			if !assertInt(int64(checker.timers["packet_loss"]), v) {
 				ck["status"] = testStatusFail
-				testStatus.status = testStatusFailed
+				testStatus.status = testStatusFail
 				testStatus.msg = fmt.Sprintf("packet_loss didn't matched %s", c.Endpoint)
 			}
 
 			checker.assertions = append(checker.assertions, ck)
 
-		case "packet_received":
+		case assertTypeICMPPacketRecv:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_recv"])
 			if !assertInt(int64(checker.timers["packet_recv"]), v) {
 				ck["status"] = testStatusFail
-				testStatus.status = testStatusFailed
+				testStatus.status = testStatusFail
 				testStatus.msg = fmt.Sprintf("packet_received didn't matched %s", c.Endpoint)
 			}
 			checker.assertions = append(checker.assertions, ck)
@@ -269,14 +275,6 @@ func (checker *icmpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *icmpChecker) getTestBody() map[string]interface{} {
+func (checker *icmpChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
-}
-
-func (checker *icmpChecker) getDetails() map[string]float64 {
-	return checker.details
-}
-
-func timeInMs(t time.Duration) float64 {
-	return float64(t) / float64(time.Millisecond)
 }

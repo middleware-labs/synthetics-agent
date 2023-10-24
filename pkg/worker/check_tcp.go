@@ -10,6 +10,12 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	assertTypeTCPResponseTime string = "response_time"
+	assertTypeTCPNetworkHops  string = "network_hops"
+	assertTypeTCPConnection   string = "connection"
+)
+
 type netter interface {
 	lookupIP(host string) ([]net.IP, error)
 	dialTimeout(network, address string,
@@ -79,7 +85,7 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 		testBody := make(map[string]interface{}, 0)
 		testBody["assertions"] = []map[string]interface{}{
 			{
-				"type": "response_time",
+				"type": assertTypeTCPResponseTime,
 				"config": map[string]string{
 					"operator": "is",
 					"value":    fmt.Sprintf("%v", checker.timers["duration"]),
@@ -110,7 +116,7 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 				testStatus.msg = "assert failed, response_time didn't matched"
 			}
 
-		case "network_hopes":
+		case "network_hops":
 			v, there := checker.attrs.Get("hops.count")
 			ck["actual"] = fmt.Sprintf("%v", v.Int())
 
@@ -120,7 +126,7 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 				testStatus.msg = "assert failed, network hopes count didn't matched"
 			}
 
-		case "connection":
+		case assertTypeTCPConnection:
 			assert.Config.Operator = "is"
 			ck["actual"] = tcpStatus
 			ck["reason"] = "should be is " + assert.Config.Value
@@ -227,7 +233,7 @@ func (checker *tcpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *tcpChecker) getTestBody() map[string]interface{} {
+func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
 }
 

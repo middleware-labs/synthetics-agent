@@ -22,6 +22,14 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	assertTypeHTTPBody         = "body"
+	assertTypeHTTPBodyHash     = "body_hash"
+	assertTypeHTTPHeader       = "header"
+	assertTypeHTTPResponseTime = "response_time"
+	assertTypeHTTPStatusCode   = "status_code"
+)
+
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
@@ -489,34 +497,36 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	var checkHttp200 = true
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
-		artVal := make(map[string]string)
-		artVal["type"] = assert.Type
+		checker.assertions = append(checker.assertions,
+			map[string]string{
+				"type": assert.Type,
+			})
 		var assertStatus testStatus
 		switch assert.Type {
-		case "body":
+		case assertTypeHTTPBody:
 			var bodyAssertions map[string]string
 			bodyAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
 			checker.assertions = append(checker.assertions, bodyAssertions)
 
-		case "body_hash":
+		case assertTypeHTTPBodyHash:
 			var bodyHashAssertions map[string]string
 			bodyHashAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
 			checker.assertions = append(checker.assertions, bodyHashAssertions)
 
-		case "header":
+		case assertTypeHTTPHeader:
 			var headerAssertions map[string]string
 			assertHeader := resp.Header.Get(assert.Config.Target)
 			headerAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
 			checker.assertions = append(checker.assertions, headerAssertions)
 
-		case "response_time":
+		case assertTypeHTTPResponseTime:
 			var responseTimeAssertions map[string]string
 			responseTime := checker.timers["duration"]
 			responseTimeAssertions, assertStatus =
 				getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
 			checker.assertions = append(checker.assertions, responseTimeAssertions)
 
-		case "status_code":
+		case assertTypeHTTPStatusCode:
 			checkHttp200 = false
 			var statusCodeAssertions map[string]string
 			statusCodeAssertions, assertStatus =
@@ -560,12 +570,8 @@ func (checker *httpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *httpChecker) getTestBody() map[string]interface{} {
+func (checker *httpChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
-}
-
-func (checker *httpChecker) getDetails() map[string]float64 {
-	return nil
 }
 
 func getMD5(text string) string {

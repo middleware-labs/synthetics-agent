@@ -38,7 +38,7 @@ func getMockPinger(stats *probing.Statistics, runErr error) pinger {
 	}
 }
 
-func TestICMPChecker_check(t *testing.T) {
+func TestICMPCheck(t *testing.T) {
 	// create a new ICMP checker instance
 	tests := []struct {
 		name        string
@@ -474,7 +474,7 @@ func TestICMPChecker_check(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pinger := getMockPinger(test.stats, test.pingerErr)
-			icmpChecker := newICMPChecker(test.c, pinger)
+			icmpChecker := newICMPChecker(test.c, pinger).(*icmpChecker)
 			status := icmpChecker.check()
 			if status.status != test.status || status.msg != test.msg {
 				t.Errorf("%s: expected status to be %s (%s), but got %s (%s)",
@@ -488,7 +488,7 @@ func TestICMPChecker_check(t *testing.T) {
 
 			// Test request
 			if test.c.CheckTestRequest.URL != "" {
-				testBody := icmpChecker.getTestBody()
+				testBody := icmpChecker.getTestResponseBody()
 				if testBody["rcmp_status"] != "SUCCESSFUL" {
 					t.Fatalf("%s: expected test status to be SUCCESSFUL, but got %s",
 						test.name, testBody["rcmp_status"])
@@ -540,7 +540,7 @@ func TestICMPChecker_check(t *testing.T) {
 			}
 
 			// check the details
-			gotDetails := icmpChecker.getDetails()
+			gotDetails := icmpChecker.details
 			if len(gotDetails) != 7 {
 				t.Fatalf("%s: expected 7 details, but got %d",
 					test.name, len(gotDetails))
@@ -629,7 +629,7 @@ func TestICMPChecker_check(t *testing.T) {
 	}
 }
 
-func TestICMPChecker_processICMPResponse(t *testing.T) {
+func TestICMPProcessICMPResponse(t *testing.T) {
 
 	tests := []struct {
 		name       string
@@ -765,9 +765,9 @@ func TestICMPChecker_processICMPResponse(t *testing.T) {
 			}
 
 			for k, v := range test.details {
-				if icmpChecker.getDetails()[k] != v {
+				if icmpChecker.details[k] != v {
 					t.Errorf("expected %s to be %f, but got %f",
-						k, v, icmpChecker.getDetails()[k])
+						k, v, icmpChecker.details[k])
 				}
 			}
 		})

@@ -273,3 +273,7 @@ type MonitorOptions struct {
 	TriggerFailsCase        bool          `json:"trigger_fails_case"`
 	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
 }
+
+func timeInMs(t time.Duration) float64 {
+	return float64(t) / float64(time.Millisecond)
+}

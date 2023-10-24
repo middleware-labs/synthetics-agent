@@ -13,6 +13,11 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	assertTypeSSLResponseTime string = "response_time"
+	assertTypeSSLCertificate  string = "certificate"
+)
+
 type sslChecker struct {
 	c          SyntheticCheck
 	timers     map[string]float64
@@ -65,7 +70,7 @@ func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
 
 	if testStatus.status != testStatusOK {
 		checker.assertions = append(checker.assertions, map[string]string{
-			"type":   "certificate",
+			"type":   assertTypeSSLCertificate,
 			"reason": "will not be checked",
 			"actual": "N/A",
 			"status": "FAIL",
@@ -86,7 +91,7 @@ func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
 	}
 
 	checker.testBody["assertions"] = append(checker.testBody["assertions"].([]map[string]interface{}), map[string]interface{}{
-		"type": "response_time",
+		"type": assertTypeSSLResponseTime,
 		"config": map[string]string{
 			"operator": "is",
 			"value":    fmt.Sprintf("%v", checker.timers["duration"]),
@@ -127,7 +132,7 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 		assertVal["type"] = assert.Type
 
 		switch assert.Type {
-		case "certificate":
+		case assertTypeSSLCertificate:
 			if assert.Config.Operator == "expires_in_greater_then_days" {
 				assert.Config.Operator = "greater_then"
 			}
@@ -147,7 +152,7 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 			}
 			checker.assertions = append(checker.assertions, assertVal)
 
-		case "response_time":
+		case assertTypeSSLResponseTime:
 			assertVal["reason"] = "response time is " +
 				strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 				" " + assert.Config.Value + " ms"
@@ -288,7 +293,7 @@ func (checker *sslChecker) check() testStatus {
 
 		checker.testBody["assertions"] = []map[string]interface{}{
 			{
-				"type": "certificate",
+				"type": assertTypeSSLCertificate,
 				"config": map[string]string{
 					"operator": "expires_in_greater_then_days",
 					"value":    strconv.FormatInt(expiryDays, 10),
@@ -311,10 +316,6 @@ func (checker *sslChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *sslChecker) getTestBody() map[string]interface{} {
+func (checker *sslChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
-}
-
-func (checker *sslChecker) getDetails() map[string]float64 {
-	return nil
 }

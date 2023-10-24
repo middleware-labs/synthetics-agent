@@ -24,7 +24,7 @@ func (n *mockNetter) connClose(conn net.Conn) error {
 	return nil
 }
 
-func TestTCPChecker_check(t *testing.T) {
+func TestTCPCheck(t *testing.T) {
 
 	tests := []struct {
 		name       string
@@ -150,7 +150,6 @@ func TestTCPChecker_check(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(tt.name, func(t *testing.T) {
 			checker := newTCPChecker(tt.c).(*tcpChecker)
 			checker.netter = tt.netter
