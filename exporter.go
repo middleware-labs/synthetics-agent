@@ -119,6 +119,7 @@ func exportProtoRequest(account string, tr pmetricotlp.ExportRequest) {
 		if err != nil {
 			log.Errorf("[Dur: %s] failed to make an HTTP request: %v", time.Since(start).String(), err)
 		} else {
+			defer resp.Body.Close()
 			if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
 				// Request is successful.
 				body, err := io.ReadAll(resp.Body)
