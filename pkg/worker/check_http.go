@@ -234,7 +234,7 @@ func (checker *httpChecker) processHTTPResponse() {
 		{
 			"type": "response_time",
 			"config": map[string]string{
-				"operator": "is",
+				"operator": "less_then",
 				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 			},
 		},
@@ -497,48 +497,43 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	var checkHttp200 = true
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
-		checker.assertions = append(checker.assertions,
-			map[string]string{
-				"type": assert.Type,
-			})
+		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
 		case assertTypeHTTPBody:
-			var bodyAssertions map[string]string
-			bodyAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
-			checker.assertions = append(checker.assertions, bodyAssertions)
+			testAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
 
 		case assertTypeHTTPBodyHash:
-			var bodyHashAssertions map[string]string
-			bodyHashAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
-			checker.assertions = append(checker.assertions, bodyHashAssertions)
+			testAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
 
 		case assertTypeHTTPHeader:
-			var headerAssertions map[string]string
 			assertHeader := resp.Header.Get(assert.Config.Target)
-			headerAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
-			checker.assertions = append(checker.assertions, headerAssertions)
+			testAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
 
 		case assertTypeHTTPResponseTime:
-			var responseTimeAssertions map[string]string
 			responseTime := checker.timers["duration"]
-			responseTimeAssertions, assertStatus =
-				getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
-			checker.assertions = append(checker.assertions, responseTimeAssertions)
+			testAssertions, assertStatus = getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
 
 		case assertTypeHTTPStatusCode:
 			checkHttp200 = false
-			var statusCodeAssertions map[string]string
-			statusCodeAssertions, assertStatus =
-				getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert)
-			checker.assertions = append(checker.assertions,
-				statusCodeAssertions)
+			testAssertions, assertStatus = getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert)
 		}
 
 		if assertStatus.status != testStatusOK {
 			tStatus.status = testStatusFail
 			tStatus.msg = "one or more test cases failed"
 		}
+
+		assertChecker := map[string]string{
+			"type":   assert.Type,
+			"status": "OK",
+			"reason": fmt.Sprintf("should be %s %s", strings.ReplaceAll(assert.Config.Operator, "_", " "), assert.Config.Value),
+			"actual": "N/A",
+		}
+		for k, v := range testAssertions {
+			assertChecker[k] = v
+		}
+		checker.assertions = append(checker.assertions, assertChecker)
 	}
 
 	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&

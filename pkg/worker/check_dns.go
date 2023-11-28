@@ -214,9 +214,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			continue
 		}
 
+		ck := make(map[string]string)
 		switch assert.Type {
 		case assertTypeDNSResponseTime:
-			ck := make(map[string]string)
 			ck["type"] = assert.Type
 			ck["status"] = testStatusOK
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
@@ -226,14 +226,12 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				ck["reason"] = "response time assertion failed"
 			}
 			ck["status"] = testStatusOK
-			checker.assertions = append(checker.assertions, ck)
 
 		case assertTypeDNSEveryAvailableRecord:
 			fallthrough
 		case assertTypeDNSAtLeastOneRecord:
 			records := make([]string, 0)
 
-			ck := make(map[string]string)
 			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
 				" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
 			ck["status"] = testStatusOK
@@ -330,6 +328,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				testStatus.msg = "no record matched with given condition " + strings.Join(records, ",")
 			}
 		}
+		checker.assertions = append(checker.assertions, ck)
 	}
 	return testStatus
 }

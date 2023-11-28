@@ -128,9 +128,10 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 
 	c := checker.c
 	for _, assert := range c.Request.Assertions.Ssl.Cases {
-		assertVal := make(map[string]string)
-		assertVal["type"] = assert.Type
 
+		assertChecker := map[string]string{
+			"type": assert.Type,
+		}
 		switch assert.Type {
 		case assertTypeSSLCertificate:
 			if assert.Config.Operator == "expires_in_greater_then_days" {
@@ -139,35 +140,35 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 			if assert.Config.Operator == "expires_in_less_then_days" {
 				assert.Config.Operator = "less_then"
 			}
-			assertVal["reason"] = "will expire in " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value + " days"
-			assertVal["actual"] = strconv.FormatInt(expiryDays, 10) + " days"
+			assertChecker["reason"] = "will expire in " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value + " days"
+			assertChecker["actual"] = strconv.FormatInt(expiryDays, 10) + " days"
 
 			if !assertInt(expiryDays, assert) {
-				assertVal["status"] = testStatusFail
+				assertChecker["status"] = testStatusFail
 				testStatus.status = testStatusFail
 				testStatus.msg = "assert failed, expiry didn't matched, certificate expire in " +
 					strconv.FormatInt(expiryDays, 10) + " days"
 			} else {
-				assertVal["status"] = testStatusPass
+				assertChecker["status"] = testStatusPass
 			}
-			checker.assertions = append(checker.assertions, assertVal)
 
 		case assertTypeSSLResponseTime:
-			assertVal["reason"] = "response time is " +
+			assertChecker["reason"] = "response time is " +
 				strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 				" " + assert.Config.Value + " ms"
-			assertVal["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
+			assertChecker["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
 			if !assertInt(int64(checker.timers["duration"]), assert) {
 				testStatus.status = testStatusFail
 				testStatus.msg = "assert failed, response_time didn't matched"
 
-				assertVal["status"] = testStatusFail
+				assertChecker["status"] = testStatusFail
 			} else {
-				assertVal["status"] = testStatusPass
+				assertChecker["status"] = testStatusPass
 			}
-
-			checker.assertions = append(checker.assertions, assertVal)
 		}
+
+		checker.assertions = append(checker.assertions, assertChecker)
+
 	}
 	return testStatus
 }

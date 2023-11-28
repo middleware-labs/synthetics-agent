@@ -230,8 +230,7 @@ func (checker *icmpChecker) check() testStatus {
 		ck := make(map[string]string)
 		ck["type"] = v.Type
 		ck["status"] = "OK"
-		ck["reason"] = "should be " + strings.ReplaceAll(v.Config.Operator, "_", " ") +
-			" " + v.Config.Value
+		ck["reason"] = fmt.Sprintf("should be %s %s", strings.ReplaceAll(v.Config.Operator, "_", " "), v.Config.Value)
 
 		switch v.Type {
 		case assertTypeICMPLatency:
@@ -242,7 +241,6 @@ func (checker *icmpChecker) check() testStatus {
 				testStatus.msg = fmt.Sprintf("latency didn't matched %s", c.Endpoint)
 			}
 
-			checker.assertions = append(checker.assertions, ck)
 		case assertTypeICMPPacketLoss:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_loss"])
 			if !assertInt(int64(checker.timers["packet_loss"]), v) {
@@ -251,8 +249,6 @@ func (checker *icmpChecker) check() testStatus {
 				testStatus.msg = fmt.Sprintf("packet_loss didn't matched %s", c.Endpoint)
 			}
 
-			checker.assertions = append(checker.assertions, ck)
-
 		case assertTypeICMPPacketRecv:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_recv"])
 			if !assertInt(int64(checker.timers["packet_recv"]), v) {
@@ -260,8 +256,9 @@ func (checker *icmpChecker) check() testStatus {
 				testStatus.status = testStatusFail
 				testStatus.msg = fmt.Sprintf("packet_received didn't matched %s", c.Endpoint)
 			}
-			checker.assertions = append(checker.assertions, ck)
 		}
+
+		checker.assertions = append(checker.assertions, ck)
 	}
 	checker.processICMPResponse(testStatus)
 	return testStatus

@@ -135,6 +135,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 
 	for _, assert := range c.Request.Assertions.WebSocket.Cases {
 		ck := make(map[string]string)
+
 		ck["type"] = strings.ReplaceAll(assert.Type, "_", " ")
 		switch assert.Type {
 		case assertTypeWSResponseTime:
@@ -149,7 +150,6 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 				ck["status"] = testStatusPass
 				ck["reason"] = "response time matched with the condition"
 			}
-			checker.assertions = append(checker.assertions, ck)
 		case assertTypeWSRecvMessage:
 			ck["actual"] = recMsg
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
@@ -162,8 +162,6 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			} else {
 				ck["status"] = testStatusPass
 			}
-			checker.assertions = append(checker.assertions, ck)
-
 		case assertTypeWSHeader:
 			if httpResp != nil && len(httpResp.Header) > 0 {
 				vl := httpResp.Header.Get(assert.Config.Target)
@@ -184,8 +182,9 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 				ck["actual"] = "No Header"
 				ck["reason"] = testStatus.msg
 			}
-			checker.assertions = append(checker.assertions, ck)
 		}
+
+		checker.assertions = append(checker.assertions, ck)
 	}
 
 	return testStatus
