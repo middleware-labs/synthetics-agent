@@ -45,7 +45,7 @@ type httpChecker struct {
 	k6Scripter k6Scripter
 }
 
-func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
+func newHTTPChecker(c SyntheticCheck) (ProtocolChecker, error) {
 	parsedURL, err := url.Parse(c.Endpoint)
 	if err != nil {
 		return nil, err

@@ -282,7 +282,7 @@ type grpcChecker struct {
 	attrs        pcommon.Map
 }
 
-func newGRPCChecker(c SyntheticCheck) protocolChecker {
+func newGRPCChecker(c SyntheticCheck) ProtocolChecker {
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",

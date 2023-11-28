@@ -46,7 +46,7 @@ type tcpChecker struct {
 	netter     netter
 }
 
-func newTCPChecker(c SyntheticCheck) protocolChecker {
+func newTCPChecker(c SyntheticCheck) ProtocolChecker {
 	return &tcpChecker{
 		c: c,
 		timers: map[string]float64{
