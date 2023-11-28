@@ -169,7 +169,7 @@ type dnsChecker struct {
 	attrs      pcommon.Map
 }
 
-func newDNSChecker(c SyntheticCheck) ProtocolChecker {
+func newDNSChecker(c SyntheticCheck) protocolChecker {
 	return &dnsChecker{
 		c:      c,
 		lookup: make([]map[string]string, 0),

@@ -87,7 +87,7 @@ func getDefaultPinger(c SyntheticCheck) (*icmpPinger, error) {
 	return &icmpPinger{Pinger: pinger}, nil
 }
 
-func newICMPChecker(c SyntheticCheck, pinger pinger) ProtocolChecker {
+func newICMPChecker(c SyntheticCheck, pinger pinger) protocolChecker {
 	return &icmpChecker{
 		c: c,
 		details: map[string]float64{

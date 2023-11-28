@@ -41,7 +41,7 @@ func getDefaultTracer(timeout int) *traceroute.Tracer {
 }
 
 func newTraceRouteChecker(ip net.IP, timeout int,
-	timers map[string]float64, attrs pcommon.Map) ProtocolChecker {
+	timers map[string]float64, attrs pcommon.Map) protocolChecker {
 	return &traceRouteChecker{
 		ip:      ip,
 		timeout: timeout,

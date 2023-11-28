@@ -45,7 +45,7 @@ type wsChecker struct {
 	attrs      pcommon.Map
 }
 
-func newWSChecker(c SyntheticCheck) ProtocolChecker {
+func newWSChecker(c SyntheticCheck) protocolChecker {
 
 	timers := map[string]float64{
 		"duration":         0,

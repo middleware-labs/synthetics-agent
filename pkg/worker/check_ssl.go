@@ -26,7 +26,7 @@ type sslChecker struct {
 	attrs      pcommon.Map
 }
 
-func newSSLChecker(c SyntheticCheck) ProtocolChecker {
+func newSSLChecker(c SyntheticCheck) protocolChecker {
 	return &sslChecker{
 		c: c,
 		timers: map[string]float64{

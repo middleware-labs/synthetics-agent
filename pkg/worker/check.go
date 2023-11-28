@@ -20,7 +20,7 @@ type SyntheticCheck struct {
 	SyntheticsModel
 }
 
-type ProtocolChecker interface {
+type protocolChecker interface {
 	check() testStatus
 	getTimers() map[string]float64
 	getAttrs() pcommon.Map
@@ -39,7 +39,7 @@ var (
 	testStatusPass  string = "PASS"
 )
 
-func NewProtocolChecker(c SyntheticCheck) (ProtocolChecker, error) {
+func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 	switch c.Proto {
 	case "http":
 		httpChecker, err := newHTTPChecker(c)
@@ -155,7 +155,7 @@ func (cs *CheckState) fire() {
 		}
 	}
 
-	protocolChecker, err := NewProtocolChecker(c)
+	protocolChecker, err := getProtocolChecker(c)
 	if err != nil {
 		return
 	}

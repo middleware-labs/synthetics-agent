@@ -29,7 +29,7 @@ const (
 	udpStatusFailed     = "failed"
 )
 
-func newUDPChecker(c SyntheticCheck) ProtocolChecker {
+func newUDPChecker(c SyntheticCheck) protocolChecker {
 	return &udpChecker{
 		c: c,
 		timers: map[string]float64{
