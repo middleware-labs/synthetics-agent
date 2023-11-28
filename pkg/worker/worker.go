@@ -154,6 +154,10 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 	}
 }
 
+func (w *Worker) DirectRun(v SyntheticCheck) (map[string]interface{}, error) {
+	checkState := w.getTestState(v)
+	return checkState.testFire()
+}
 func (w *Worker) SubscribeUpdates(topic string, token string) {
 	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 

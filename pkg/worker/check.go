@@ -115,6 +115,15 @@ func assertInt(data int64, assert CaseOptions) bool {
 	return true
 }
 
+func (cs *CheckState) testFire() (map[string]interface{}, error) {
+	protocolChecker, err := getProtocolChecker(cs.check)
+	var resp map[string]interface{}
+	if err == nil {
+		protocolChecker.check()
+		resp = protocolChecker.getTestResponseBody()
+	}
+	return resp, err
+}
 func (cs *CheckState) fire() {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
@@ -218,6 +227,10 @@ func (w *Worker) removeCheckState(check *SyntheticCheck) {
 		delete(w._checks, check.Uid)
 	}
 }
+func (w *Worker) getTestState(check SyntheticCheck) *CheckState {
+	return newCheckState(check, w.cfg.Location, w.cfg.CaptureEndpoint)
+}
+
 func (w *Worker) getCheckState(check SyntheticCheck) *CheckState {
 	lock.Lock()
 	defer lock.Unlock()

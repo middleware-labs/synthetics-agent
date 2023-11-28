@@ -203,8 +203,6 @@ func getHTTPClient(c SyntheticCheck) httpClient {
 }
 
 func (checker *httpChecker) processHTTPResponse() {
-	c := checker.c
-	isCheckTestReq := c.CheckTestRequest.URL != ""
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
 
@@ -216,11 +214,6 @@ func (checker *httpChecker) processHTTPResponse() {
 
 	if subTt > checker.timers["duration"] {
 		checker.timers["first_byte"] = checker.timers["first_byte"] - tt0
-	}
-
-	if !isCheckTestReq {
-		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
-		return
 	}
 
 	assert := []map[string]interface{}{
@@ -253,8 +246,6 @@ func (checker *httpChecker) processHTTPResponse() {
 
 	checker.testBody["assertions"] = assert
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-
-	// finishTestRequest(c, checker.testBody)
 }
 
 func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
