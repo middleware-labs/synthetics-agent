@@ -220,7 +220,7 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 	assertions = append(assertions, map[string]interface{}{
 		"type": assertTypeWSResponseTime,
 		"config": map[string]string{
-			"operator": "is",
+			"operator": "less_than",
 			"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 		},
 	})

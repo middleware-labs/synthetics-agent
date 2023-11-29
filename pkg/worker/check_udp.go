@@ -105,19 +105,18 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 		return
 	}
 
-	testBody := make(map[string]interface{})
-	testBody["assertions"] = []map[string]interface{}{
+	checker.testBody["assertions"] = []map[string]interface{}{
 		{
 			"type": assertTypeUDPResponseTime,
 			"config": map[string]string{
-				"operator": "is",
+				"operator": "less_than",
 				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 			},
 		},
 	}
 
-	testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	testBody["udp_status"] = udpStatus
+	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
+	checker.testBody["udp_status"] = udpStatus
 
 	// finishTestRequest(c, testBody)
 

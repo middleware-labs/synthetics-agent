@@ -220,7 +220,17 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				{ headers: headers }
 			)
 
-			stepsResponse[stepKey] = response.json()
+			try {
+				const jsonResp = response.json()
+				if (jsonResp) {
+					stepsResponse[stepKey] = jsonResp
+				}
+			} catch (e) {
+				stepsResponse[stepKey] = {
+					"error": "An error occurred while parsing the response body",
+					"message": "The response should be a valid JSON object",
+				}
+			}
 			
 			for (const assert of asserts) {
 				if (assert.type === 'status_code') {
