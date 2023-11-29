@@ -55,11 +55,12 @@ func newTCPChecker(c SyntheticCheck) protocolChecker {
 			"connection": 0,
 		},
 		testBody: map[string]interface{}{
-			"assertions": make([]map[string]interface{}, 0),
-			"tookMs":     "0 ms",
-			"connection": map[string]string{
-				"status": "",
-			},
+			"assertions":        make([]map[string]interface{}, 0),
+			"tookMs":            "0 ms",
+			"connection_status": tcpStatusEstablished,
+			//"connection": map[string]string{
+			//	"status": "",
+			//},
 		},
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
@@ -89,7 +90,9 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 				},
 			},
 		}
-		//checker.testBody["connection_status"] = testStatus.status
+		if checker.testBody["connection_status"] == "" {
+			checker.testBody["connection_status"] = testStatus.status
+		}
 		checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
 	}
 }
