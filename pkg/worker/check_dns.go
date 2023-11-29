@@ -349,7 +349,6 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 		return
 	}
 
-	testBody := make(map[string]interface{}, 0)
 	asr := []map[string]interface{}{
 		{
 			"type": assertTypeDNSResponseTime,
@@ -401,10 +400,10 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 		asr = append(asr, assert)
 	}
 
-	testBody["headers"] = checker.lookup
-	testBody["assertions"] = asr
-	testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	checker.testBody = testBody
+	checker.testBody["headers"] = checker.lookup
+	checker.testBody["assertions"] = asr
+	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
+	//checker.testBody = testBody
 }
 
 func (checker *dnsChecker) check() testStatus {
@@ -433,6 +432,7 @@ func (checker *dnsChecker) check() testStatus {
 	checker.attrs.PutStr("resolve.ips", strings.Join(ipss, "\n"))
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
+	checker.processDNSResponse(testStatus, ips)
 	return testStatus
 }
 
