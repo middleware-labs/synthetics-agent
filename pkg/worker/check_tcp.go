@@ -79,22 +79,18 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
-
-		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 	} else {
-		testBody := make(map[string]interface{}, 0)
-		testBody["assertions"] = []map[string]interface{}{
+		checker.testBody["assertions"] = []map[string]interface{}{
 			{
 				"type": assertTypeTCPResponseTime,
 				"config": map[string]string{
-					"operator": "is",
+					"operator": "less_than",
 					"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 				},
 			},
 		}
-		testBody["connection_status"] = testStatus.status
-		testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-		// finishTestRequest(c, testBody)
+		//checker.testBody["connection_status"] = testStatus.status
+		checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
 	}
 }
 
@@ -205,12 +201,15 @@ func (checker *tcpChecker) check() testStatus {
 
 		checker.attrs.PutStr("connection.error", tmErr.Error())
 		tcpStatus = tcpStatusRefused
+		checker.testBody["connection_status"] = tcpStatusRefused
 		if strings.Contains(tmErr.Error(), tcpStatusTimeout) {
 			tcpStatus = tcpStatusTimeout
+			checker.testBody["connection_status"] = tcpStatusTimeout
 		}
 	} else {
 		defer checker.netter.connClose(conn)
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
+		checker.testBody["connection_status"] = tcpStatusEstablished
 	}
 
 	checker.attrs.PutStr("connection.status", tcpStatus)

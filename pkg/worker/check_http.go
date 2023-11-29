@@ -227,7 +227,7 @@ func (checker *httpChecker) processHTTPResponse() {
 		{
 			"type": "response_time",
 			"config": map[string]string{
-				"operator": "less_then",
+				"operator": "less_than",
 				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 			},
 		},
