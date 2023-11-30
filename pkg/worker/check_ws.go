@@ -211,8 +211,6 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 	if c.CheckTestRequest.URL == "" {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
-
-		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}
 
@@ -234,8 +232,6 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 
 	checker.testBody["assertions"] = assertions
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	// finishTestRequest(c, checker.testBody)
-
 }
 
 func (checker *wsChecker) check() testStatus {
@@ -316,6 +312,7 @@ func (checker *wsChecker) check() testStatus {
 	checker.attrs.PutInt("ws.message_length", int64(len(msg)))
 	checker.testBody["received_message"] = string(msg)
 
+	checker.processWSResonse(testStatus, httpResp, "")
 	return testStatus
 }
 
