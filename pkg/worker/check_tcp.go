@@ -58,9 +58,6 @@ func newTCPChecker(c SyntheticCheck) protocolChecker {
 			"assertions":        make([]map[string]interface{}, 0),
 			"tookMs":            "0 ms",
 			"connection_status": tcpStatusEstablished,
-			//"connection": map[string]string{
-			//	"status": "",
-			//},
 		},
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
