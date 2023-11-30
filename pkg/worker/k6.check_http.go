@@ -55,13 +55,23 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		if assertStep, ok := response["assertions"].(map[string]interface{}); ok {
 			isfail := false
 			for _, assert := range assertStep {
-				if asrt, ok1 := assert.(map[string]string); ok1 {
-					checker.assertions = append(checker.assertions, asrt)
-					if asrt["status"] == testStatusFail && !isfail {
-						isfail = true
-						testStatus.status = testStatusFail
-						testStatus.msg = "one or more assertions failed, " + asrt["reason"]
+				newAsrt := make(map[string]string)
+				if asrt, ok1 := assert.(map[string]interface{}); ok1 {
+					for k, v := range asrt {
+						newAsrt[k] = fmt.Sprintf("%v", v)
 					}
+				} else {
+					if asrt, ok1 := assert.(map[string]string); ok1 {
+						for k, v := range asrt {
+							newAsrt[k] = fmt.Sprintf("%v", v)
+						}
+					}
+				}
+				checker.assertions = append(checker.assertions, newAsrt)
+				if newAsrt["status"] == testStatusFail && !isfail {
+					isfail = true
+					testStatus.status = testStatusFail
+					testStatus.msg = "one or more assertions failed, " + newAsrt["reason"]
 				}
 			}
 		} else {
