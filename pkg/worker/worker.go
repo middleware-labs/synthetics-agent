@@ -158,6 +158,10 @@ func (w *Worker) DirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getTestState(v)
 	return checkState.testFire()
 }
+func (w *Worker) RealDirectRun(v SyntheticCheck) (map[string]interface{}, error) {
+	checkState := w.getCheckState(v)
+	return checkState.liveTestFire()
+}
 func (w *Worker) SubscribeUpdates(topic string, token string) {
 	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 

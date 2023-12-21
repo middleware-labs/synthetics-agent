@@ -143,7 +143,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 		for (const assert of asserts) {
 			_assertions[assert.type] = {
 				"type":   assert.type,
-				"reason": assert.type.replace('_', ' ') + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
+				"reason": assert.type.replace('_', ' ') + ' ' + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
 				"actual": "N/A",
 				"status": 'FAIL',
 			}

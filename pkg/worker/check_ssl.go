@@ -93,7 +93,7 @@ func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
 	checker.testBody["assertions"] = append(checker.testBody["assertions"].([]map[string]interface{}), map[string]interface{}{
 		"type": assertTypeSSLResponseTime,
 		"config": map[string]string{
-			"operator": "is",
+			"operator": "less_than",
 			"value":    fmt.Sprintf("%v", checker.timers["duration"]),
 		},
 	})

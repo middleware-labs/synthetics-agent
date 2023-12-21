@@ -124,6 +124,21 @@ func (cs *CheckState) testFire() (map[string]interface{}, error) {
 	}
 	return resp, err
 }
+func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
+
+	protocolChecker, err := getProtocolChecker(cs.check)
+
+	testStatus := protocolChecker.check()
+	timers := protocolChecker.getTimers()
+	attr := protocolChecker.getAttrs()
+
+	return map[string]interface{}{
+		"testStatus": testStatus,
+		"timers":     timers,
+		"attr":       attr.AsRaw(),
+	}, err
+}
+
 func (cs *CheckState) fire() {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
