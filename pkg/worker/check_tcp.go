@@ -83,7 +83,7 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 				"type": assertTypeTCPResponseTime,
 				"config": map[string]string{
 					"operator": "less_than",
-					"value":    fmt.Sprintf("%v", checker.timers["duration"]),
+					"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
 				},
 			},
 		}

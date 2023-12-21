@@ -354,7 +354,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 			"type": assertTypeDNSResponseTime,
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", checker.timers["duration"]),
+				"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
 			},
 		},
 	}

@@ -63,7 +63,7 @@ func newSSLChecker(c SyntheticCheck) protocolChecker {
 	}
 }
 
-func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
+func (checker *sslChecker) processSSLResponse(testStatus testStatus) {
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
 	c := checker.c
@@ -94,7 +94,7 @@ func (checker *sslChecker) processSSLReponse(testStatus testStatus) {
 		"type": assertTypeSSLResponseTime,
 		"config": map[string]string{
 			"operator": "less_than",
-			"value":    fmt.Sprintf("%v", checker.timers["duration"]),
+			"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
 		},
 	})
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
@@ -212,7 +212,7 @@ func (checker *sslChecker) check() testStatus {
 	if err != nil {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("error connecting to server %v", err)
-		checker.processSSLReponse(testStatus)
+		checker.processSSLResponse(testStatus)
 		return testStatus
 	}
 	defer conn.Close()
@@ -305,7 +305,7 @@ func (checker *sslChecker) check() testStatus {
 	}
 
 	testStatus = checker.fillAssertions(expiryDays)
-	checker.processSSLReponse(testStatus)
+	checker.processSSLResponse(testStatus)
 	return testStatus
 }
 
