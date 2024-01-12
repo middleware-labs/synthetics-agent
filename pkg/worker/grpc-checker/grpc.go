@@ -165,8 +165,9 @@ type CheckerResponse struct {
 	Error        error
 	Status       string
 	MessageRPC   string
-	ConnTs       float64
-	InvokeTs     float64
+	ConnectionTs float64
+	ConnectTs    float64
+	ResolveTs    float64
 	Reflections  map[string]interface{}
 	RespTrailers metadata.MD
 }
@@ -184,9 +185,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 		)
 		if credErr != nil {
 			return CheckerResponse{
-				Error:  credErr,
-				Status: checkStatusErr,
-				ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+				Error:        credErr,
+				Status:       checkStatusErr,
+				ConnectionTs: float64(time.Since(_start)) / float64(time.Millisecond),
 			}
 		}
 		creds = createCred
@@ -210,9 +211,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 		fileSource, err = DescriptorSourceFromProtoFileContent(ckr.ProtoFileContent)
 		if err != nil {
 			return CheckerResponse{
-				Error:  err,
-				Status: checkStatusErr,
-				ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+				Error:        err,
+				Status:       checkStatusErr,
+				ConnectionTs: float64(time.Since(_start)) / float64(time.Millisecond),
 			}
 		}
 	}
@@ -229,9 +230,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 	cc, dialErr := grpcClient(argDial)
 	if dialErr != nil {
 		return CheckerResponse{
-			Error:  dialErr,
-			Status: checkStatusErr,
-			ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+			Error:        dialErr,
+			Status:       checkStatusErr,
+			ConnectionTs: float64(time.Since(_start)) / float64(time.Millisecond),
 		}
 	}
 
@@ -256,6 +257,7 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 	defer reset()
 
 	cts := float64(time.Since(_start)) / float64(time.Millisecond)
+	connStart := time.Now()
 
 	if ckr.Reflection {
 		reflections := make(map[string]interface{}, 0)
@@ -281,9 +283,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 			}
 		}
 		return CheckerResponse{
-			Status:      checkStatusOk,
-			ConnTs:      cts,
-			Reflections: reflections,
+			Status:       checkStatusOk,
+			ConnectionTs: cts,
+			Reflections:  reflections,
 		}
 	}
 
@@ -292,16 +294,16 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 		_, err := descSource.FindSymbol(ckr.ServiceMethodSymbol)
 		if err != nil {
 			return CheckerResponse{
-				Error:  fmt.Errorf("failed to resolve symbol %s", ckr.ServiceMethodSymbol),
-				Status: checkStatusErr,
-				ConnTs: cts,
+				Error:        fmt.Errorf("failed to resolve symbol %s", ckr.ServiceMethodSymbol),
+				Status:       checkStatusErr,
+				ConnectionTs: cts,
 			}
 		}
 
 		return CheckerResponse{
-			Error:  fmt.Errorf("service method symbol is required"),
-			Status: checkStatusFail,
-			ConnTs: cts,
+			Error:        fmt.Errorf("service method symbol is required"),
+			Status:       checkStatusFail,
+			ConnectionTs: cts,
 		}
 	}
 
@@ -318,9 +320,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 	rf, formatter, err := RequestParserAndFormatter("json", descSource, messageReader, options)
 	if err != nil {
 		return CheckerResponse{
-			Error:  fmt.Errorf("failed to construct request parser and formatter for %q: %v", "json", err),
-			Status: checkStatusErr,
-			ConnTs: cts,
+			Error:        fmt.Errorf("failed to construct request parser and formatter for %q: %v", "json", err),
+			Status:       checkStatusErr,
+			ConnectionTs: cts,
 		}
 	}
 
@@ -328,6 +330,7 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 		Out:            os.Stdout,
 		Formatter:      formatter,
 		VerbosityLevel: 0,
+		ConnectStart:   connStart,
 	}
 
 	rsp := dynamicInvokeRPC(ctx, descSource, cc, ckr.ServiceMethodSymbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
@@ -335,8 +338,9 @@ func RequestRPC(ckr CheckerOptions) CheckerResponse {
 	return CheckerResponse{
 		Error:        rsp.Error,
 		Status:       rsp.Status,
-		ConnTs:       cts,
-		InvokeTs:     rsp.InvokeTs,
+		ConnectionTs: cts,
+		ConnectTs:    rsp.ConnectTs,
+		ResolveTs:    rsp.ResolveTs,
 		MessageRPC:   rsp.MessageRPC,
 		RespTrailers: rsp.RespTrailers,
 	}

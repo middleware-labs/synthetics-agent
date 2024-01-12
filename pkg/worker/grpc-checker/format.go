@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/golang/protobuf/jsonpb" //lint:ignore SA1019 we have to import this because it appears in exported API
 	"github.com/golang/protobuf/proto"  //lint:ignore SA1019 we have to import this because it appears in exported API
@@ -304,6 +305,7 @@ type DefaultEventHandler struct {
 	Out            io.Writer
 	Formatter      Formatter
 	VerbosityLevel int
+	ConnectStart   time.Time
 	NumResponses   int
 	Status         *status.Status
 }

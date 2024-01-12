@@ -116,7 +116,6 @@ func (checker *grpcChecker) check() testStatus {
 	ctx, cnlFnc := context.WithCancel(context.Background())
 	defer cnlFnc()
 	_start := time.Now()
-
 	rsp := grpcchecker.RequestRPC(grpcchecker.CheckerOptions{
 		Ctx:                   ctx,
 		IgnoreCert:            true,
@@ -127,9 +126,16 @@ func (checker *grpcChecker) check() testStatus {
 		TimeoutSec:            c.Expect.ResponseTimeLessThen,
 		ProtoFileContent:      c.Request.GRPCPayload.ProtoFileContent,
 	})
-
-	checker.timers["connection"] = timeInMs(time.Since(_start))
+	rsp.MessageRPC = strSensitise(rsp.MessageRPC)
 	checker.timers["duration"] = timeInMs(time.Since(_start))
+	checker.timers["connection"] = rsp.ConnectionTs
+	checker.timers["connect"] = rsp.ConnectTs
+	_d0 := time.Now()
+	if rsp.ResolveTs < 1 {
+		rsp.ResolveTs = timeInMs(time.Since(_d0))
+	}
+	checker.timers["resolve"] = rsp.ResolveTs
+	checker.reflections = rsp.Reflections
 	checker.respStatus = rsp.Status
 	checker.respStr = rsp.MessageRPC
 	checker.respTrailers = rsp.RespTrailers
@@ -160,19 +166,15 @@ func (checker *grpcChecker) getAttrs() pcommon.Map {
 func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 
 	checker.testBody["tookMs"] = checker.timers["duration"]
-	checker.testBody["reflections"] = checker.reflections
-	if checker.testBody["body"] != "" && checker.respStr != "" {
+	checker.testBody["reflections"] = make(map[string]interface{}, 0)
+	if checker.c.SyntheticsModel.Request.GRPCPayload.ServiceDefinition == "reflection" {
+		checker.testBody["reflections"] = checker.reflections
+	}
+	if checker.testBody["body"] == "" && checker.respStr != "" {
 		checker.testBody["body"] = checker.respStr
 	}
 
 	assert := []map[string]interface{}{
-		{
-			"type": grpcResponse,
-			"config": map[string]string{
-				"operator": "is",
-				"value":    checker.respStr,
-			},
-		},
 		{
 			"type": grpcResponseTime,
 			"config": map[string]string{
@@ -181,8 +183,40 @@ func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 			},
 		},
 	}
+	if checker.respStr != "" {
+		assert = append(assert, map[string]interface{}{
+			"type": grpcResponse,
+			"config": map[string]string{
+				"operator": "is",
+				"value":    checker.respStr,
+			},
+		})
+	}
+	if len(checker.respTrailers) > 0 {
+		assert = append(assert, map[string]interface{}{
+			"type": grpcMetadata,
+			"config": map[string]string{
+				"operator": "is",
+				"value":    strings.Join(checker.respTrailers.Get("grpc-status"), "\n"),
+			},
+		})
+	}
 
 	checker.testBody["assertions"] = assert
 
 	return checker.testBody
+}
+
+func strSensitise(s string) string {
+	if s == "" {
+		return ""
+	}
+	// if value is a json string, then we need to remove \n, \, and whitespaces
+	if s != "" && s[0] == '{' {
+		s = strings.ReplaceAll(s, "\n", "")
+		s = strings.ReplaceAll(s, "\\", "")
+		s = strings.ReplaceAll(s, " ", "")
+	}
+	return s
+
 }
