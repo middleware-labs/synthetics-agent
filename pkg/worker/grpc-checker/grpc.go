@@ -5,18 +5,18 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"net"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/grpcreflect"
-	"github.com/middleware-labs/synthetics-agent/pkg/worker"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
-	"net"
-	"os"
-	"strings"
-	"time"
 )
 
 type GRPCClientDialOptions struct {
@@ -28,6 +28,12 @@ type GRPCClientDialOptions struct {
 	creds        credentials.TransportCredentials
 	network      string // tcp or unix
 }
+
+var (
+	checkStatusOk   = "OK"
+	checkStatusFail = "FAIL"
+	checkStatusErr  = "ERROR"
+)
 
 func blockingDial(ctx context.Context, network, address string, creds credentials.TransportCredentials, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	result := make(chan interface{}, 1)
@@ -142,28 +148,54 @@ func buildTlsCredentials(caCerts, clientCert, clientKey, serverName string) (cre
 	return credentials.NewTLS(&cfg), nil
 }
 
-func RequestRPC(c worker.SyntheticCheck) error {
-	ctx, cnlFnc := context.WithCancel(context.Background())
-	defer cnlFnc()
+type CheckerOptions struct {
+	Ctx                   context.Context
+	IgnoreCert            bool
+	Certificate           string
+	PrivateKey            string
+	Target                string
+	Reflection            bool
+	ServiceMethodSymbol   string
+	ServiceRequestMessage string
+	TimeoutSec            int
+	ProtoFileContent      string
+	Metadata              []string
+}
+type CheckerResponse struct {
+	Error        error
+	Status       string
+	MessageRPC   string
+	ConnTs       float64
+	InvokeTs     float64
+	Reflections  map[string]interface{}
+	RespTrailers metadata.MD
+}
 
+func RequestRPC(ckr CheckerOptions) CheckerResponse {
+	_start := time.Now()
+	ctx := ckr.Ctx
 	var creds credentials.TransportCredentials
-	if !c.Request.GRPCPayload.IgnoreServerCertificateError {
+	if !ckr.IgnoreCert {
 		createCred, credErr := buildTlsCredentials(
 			"",
-			c.Request.GRPCPayload.Certificate,
-			c.Request.GRPCPayload.PrivateKey,
+			ckr.Certificate,
+			ckr.PrivateKey,
 			"",
 		)
 		if credErr != nil {
-			return credErr
+			return CheckerResponse{
+				Error:  credErr,
+				Status: checkStatusErr,
+				ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+			}
 		}
 		creds = createCred
 	}
 
 	argDial := GRPCClientDialOptions{
-		ctx:        ctx,
-		target:     fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
-		timeoutSec: float64(c.Expect.ResponseTimeLessThen),
+		ctx:        ckr.Ctx,
+		target:     ckr.Target,
+		timeoutSec: float64(ckr.TimeoutSec),
 		creds:      creds,
 		network:    "tcp",
 	}
@@ -173,27 +205,36 @@ func RequestRPC(c worker.SyntheticCheck) error {
 	var refClient *grpcreflect.Client
 	var fileSource DescriptorSource
 
-	if c.Request.GRPCPayload.ProtoFileContent != "" {
+	if ckr.ProtoFileContent != "" {
 		var err error
-		fileSource, err = DescriptorSourceFromProtoFileContent(c.Request.GRPCPayload.ProtoFileContent)
+		fileSource, err = DescriptorSourceFromProtoFileContent(ckr.ProtoFileContent)
 		if err != nil {
-			return err
+			return CheckerResponse{
+				Error:  err,
+				Status: checkStatusErr,
+				ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+			}
 		}
 	}
-	symbol := c.Request.GRPCPayload.MethodSelection
+
 	addlHeaders := make([]string, 0)
 	reflHeaders := make([]string, 0)
 	rpcHeaders := make([]string, 0)
-	for _, v := range c.Request.GRPCPayload.Metadata {
-		rpcHeaders = append(rpcHeaders, fmt.Sprintf("%s: %s", v.Name, v.Value))
+	if len(ckr.Metadata) > 0 {
+		rpcHeaders = ckr.Metadata
 	}
 
 	md := MetadataFromHeaders(append(addlHeaders, reflHeaders...))
 	refCtx := metadata.NewOutgoingContext(ctx, md)
 	cc, dialErr := grpcClient(argDial)
 	if dialErr != nil {
-		return dialErr
+		return CheckerResponse{
+			Error:  dialErr,
+			Status: checkStatusErr,
+			ConnTs: float64(time.Since(_start)) / float64(time.Millisecond),
+		}
 	}
+
 	refClient = grpcreflect.NewClientAuto(refCtx, cc)
 	reflSource := DescriptorSourceFromServer(ctx, refClient)
 	if fileSource != nil {
@@ -214,8 +255,10 @@ func RequestRPC(c worker.SyntheticCheck) error {
 	}
 	defer reset()
 
-	reflectionResults := make(map[string]interface{}, 0)
-	if c.Request.GRPCPayload.ServiceDefinition == "reflection" {
+	cts := float64(time.Since(_start)) / float64(time.Millisecond)
+
+	if ckr.Reflection {
+		reflections := make(map[string]interface{}, 0)
 		listSvc, _ := refClient.ListServices()
 		for _, svc := range listSvc {
 			fc, _ := refClient.FileContainingSymbol(svc)
@@ -233,37 +276,70 @@ func RequestRPC(c worker.SyntheticCheck) error {
 							fieldParams[field.GetName()] = field.GetDefaultValue()
 						}
 					}
-					reflectionResults[methodKey] = fieldParams
+					reflections[methodKey] = fieldParams
 				}
 			}
 		}
-		fmt.Printf("reflectionResults--->%+v\n", reflectionResults)
-	} else {
-		rdrProtoCnt := strings.NewReader(fmt.Sprintf("%s", c.Request.GRPCPayload.Message))
-
-		options := FormatOptions{
-			EmitJSONDefaultFields: false,
-			IncludeTextSeparator:  true,
-			AllowUnknownFields:    false,
+		return CheckerResponse{
+			Status:      checkStatusOk,
+			ConnTs:      cts,
+			Reflections: reflections,
 		}
-		rf, formatter, err := RequestParserAndFormatter("json", descSource, rdrProtoCnt, options)
-		if err != nil {
-			return fmt.Errorf("failed to construct request parser and formatter for %q: %v", "json", err)
-		}
-
-		h := &DefaultEventHandler{
-			Out:            os.Stdout,
-			Formatter:      formatter,
-			VerbosityLevel: 0,
-		}
-
-		rsp := dynamicInvokeRPC(ctx, descSource, cc, symbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
-		fmt.Println("rsp.Status--->", rsp.Status)
-		fmt.Println("rsp.MessageRPC--->", rsp.MessageRPC)
-		fmt.Println("rsp.Error--->", rsp.Error)
 	}
 
-	return nil
+	if ckr.ServiceMethodSymbol == "" {
+
+		_, err := descSource.FindSymbol(ckr.ServiceMethodSymbol)
+		if err != nil {
+			return CheckerResponse{
+				Error:  fmt.Errorf("failed to resolve symbol %s", ckr.ServiceMethodSymbol),
+				Status: checkStatusErr,
+				ConnTs: cts,
+			}
+		}
+
+		return CheckerResponse{
+			Error:  fmt.Errorf("service method symbol is required"),
+			Status: checkStatusFail,
+			ConnTs: cts,
+		}
+	}
+
+	var messageReader *strings.Reader
+	if ckr.ServiceRequestMessage != "" {
+		messageReader = strings.NewReader(fmt.Sprintf("%s", ckr.ServiceRequestMessage))
+	}
+
+	options := FormatOptions{
+		EmitJSONDefaultFields: false,
+		IncludeTextSeparator:  true,
+		AllowUnknownFields:    false,
+	}
+	rf, formatter, err := RequestParserAndFormatter("json", descSource, messageReader, options)
+	if err != nil {
+		return CheckerResponse{
+			Error:  fmt.Errorf("failed to construct request parser and formatter for %q: %v", "json", err),
+			Status: checkStatusErr,
+			ConnTs: cts,
+		}
+	}
+
+	h := &DefaultEventHandler{
+		Out:            os.Stdout,
+		Formatter:      formatter,
+		VerbosityLevel: 0,
+	}
+
+	rsp := dynamicInvokeRPC(ctx, descSource, cc, ckr.ServiceMethodSymbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
+
+	return CheckerResponse{
+		Error:        rsp.Error,
+		Status:       rsp.Status,
+		ConnTs:       cts,
+		InvokeTs:     rsp.InvokeTs,
+		MessageRPC:   rsp.MessageRPC,
+		RespTrailers: rsp.RespTrailers,
+	}
 }
 
 type CompositeSource struct {

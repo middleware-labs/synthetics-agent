@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	//lint:ignore SA1019 we have to import this because it appears in exported API
-	"github.com/golang/protobuf/proto" //lint:ignore SA1019 we have to import this because it appears in exported API
+	"time"
+
+	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
@@ -20,15 +21,17 @@ import (
 type RequestSupplier func(proto.Message) error
 
 type InvokeResponse struct {
-	Status     string
-	MessageRPC string
-	Error      error
+	Status       string
+	MessageRPC   string
+	Error        error
+	InvokeTs     float64
+	RespTrailers metadata.MD
 }
 
 func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynamic.Channel, methodName string, headers []string, handler *DefaultEventHandler, requestData RequestSupplier) InvokeResponse {
 
 	rsp := InvokeResponse{
-		Status:     "FAIL",
+		Status:     checkStatusFail,
 		MessageRPC: "",
 		Error:      nil,
 	}
@@ -36,14 +39,14 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 
 	svc, mth := parseSymbol(methodName)
 	if svc == "" || mth == "" {
-		rsp.Status = "FAIL"
+		rsp.Status = checkStatusFail
 		rsp.Error = fmt.Errorf("given method name %q is not in expected format: 'service/method' or 'service.method'", methodName)
 		return rsp
 	}
 
 	dsc, err := source.FindSymbol(svc)
 	if err != nil {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		errStatus, hasStatus := status.FromError(err)
 		switch {
 		case hasStatus && isNotFoundError(err):
@@ -72,7 +75,7 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 	}
 	_, err = GetDescriptorText(mtd, nil)
 	if err != nil {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		rsp.Error = fmt.Errorf("failed to get descriptor text: %v", err)
 		return rsp
 	}
@@ -80,12 +83,12 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 	var ext dynamic.ExtensionRegistry
 	alreadyFetched := map[string]bool{}
 	if err = fetchAllExtensions(source, &ext, mtd.GetInputType(), alreadyFetched); err != nil {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		rsp.Error = fmt.Errorf("error resolving server extensions for message %s: %v", mtd.GetInputType().GetFullyQualifiedName(), err)
 		return rsp
 	}
 	if err = fetchAllExtensions(source, &ext, mtd.GetOutputType(), alreadyFetched); err != nil {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		rsp.Error = fmt.Errorf("error resolving server extensions for message %s: %v", mtd.GetOutputType().GetFullyQualifiedName(), err)
 		return rsp
 	}
@@ -106,14 +109,14 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 
 	err = requestData(req)
 	if err != nil && err != io.EOF {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		rsp.Error = fmt.Errorf("error getting request data: %v", err)
 		return rsp
 	}
 	if err != io.EOF {
 		err := requestData(req)
 		if err == nil {
-			rsp.Status = "FAIL"
+			rsp.Status = checkStatusFail
 			rsp.Error = fmt.Errorf("method %q is a unary RPC, but request data contained more than 1 message", mtd.GetFullyQualifiedName())
 			return rsp
 		} else if err != io.EOF {
@@ -123,12 +126,15 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 	}
 
 	// Now we can actually invoke the RPC!
+	invokeStart := time.Now()
 	var respHeaders metadata.MD
 	var respTrailers metadata.MD
 	resp, err := stub.InvokeRpc(ctx, mtd, req, grpc.Trailer(&respTrailers), grpc.Header(&respHeaders))
 	stat, ok := status.FromError(err)
+	rsp.RespTrailers = respTrailers
+	rsp.InvokeTs = float64(time.Since(invokeStart)) / float64(time.Millisecond)
 	if !ok {
-		rsp.Status = "ERROR"
+		rsp.Status = checkStatusErr
 		rsp.Error = fmt.Errorf("grpc call for %q failed: %v", mtd.GetFullyQualifiedName(), err)
 		return rsp
 	}
@@ -137,7 +143,7 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 		msg, fErr := handler.Formatter(resp)
 		rsp.MessageRPC = msg
 		rsp.Error = fErr
-		rsp.Status = "OK"
+		rsp.Status = checkStatusOk
 		return rsp
 	}
 	return rsp
