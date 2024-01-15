@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	grpcchecker "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
+	"math"
 	"strings"
 	"time"
 
@@ -113,6 +114,7 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 
 func (checker *grpcChecker) check() testStatus {
 	c := checker.c
+	testReq := c.CheckTestRequest.URL != ""
 	ctx, cnlFnc := context.WithCancel(context.Background())
 	defer cnlFnc()
 	_start := time.Now()
@@ -146,12 +148,15 @@ func (checker *grpcChecker) check() testStatus {
 	if rsp.Error != nil {
 		testStatus.msg = rsp.Error.Error()
 		checker.testBody["body"] = testStatus.msg
+		checker.testBody["error"] = testStatus.msg
 		checker.processGRPCError(testStatus, c)
 		return testStatus
 	}
 
-	testStatus = checker.fillGRPCAssertions()
-	checker.testBody["body"] = testStatus.msg
+	if !testReq {
+		testStatus = checker.fillGRPCAssertions()
+		checker.testBody["body"] = testStatus.msg
+	}
 	return testStatus
 }
 
@@ -165,7 +170,7 @@ func (checker *grpcChecker) getAttrs() pcommon.Map {
 
 func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 
-	checker.testBody["tookMs"] = checker.timers["duration"]
+	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
 	checker.testBody["reflections"] = make(map[string]interface{}, 0)
 	if checker.c.SyntheticsModel.Request.GRPCPayload.ServiceDefinition == "reflection" {
 		checker.testBody["reflections"] = checker.reflections
@@ -179,7 +184,7 @@ func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 			"type": grpcResponseTime,
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+				"value":    fmt.Sprintf("%v", math.Floor(checker.timers["duration"]*0.4+checker.timers["duration"])),
 			},
 		},
 	}
