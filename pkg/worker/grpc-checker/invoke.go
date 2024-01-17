@@ -1,12 +1,8 @@
-package grpcchecker
+package grpccheckerhelper
 
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
-	"time"
-
 	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -16,6 +12,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"io"
+	"strings"
+	"time"
 )
 
 type RequestSupplier func(proto.Message) error
@@ -29,7 +28,7 @@ type InvokeResponse struct {
 	RespTrailers metadata.MD
 }
 
-func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynamic.Channel, methodName string, headers []string, handler *DefaultEventHandler, requestData RequestSupplier) InvokeResponse {
+func DynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynamic.Channel, methodName string, headers []string, handler *DefaultEventHandler, requestData RequestSupplier) InvokeResponse {
 	rsp := InvokeResponse{
 		Status:     checkStatusFail,
 		MessageRPC: "",
@@ -151,6 +150,9 @@ func dynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 		rsp.MessageRPC = msg
 		rsp.Error = fErr
 		rsp.Status = checkStatusOk
+		if fErr != nil {
+			rsp.Status = checkStatusErr
+		}
 		return rsp
 	}
 	return rsp

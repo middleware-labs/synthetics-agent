@@ -1,4 +1,4 @@
-package grpcchecker
+package grpccheckerhelper
 
 import (
 	"context"

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"errors"
+	grpccheckerhelper "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestBuildCredentials(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			creds, err := buildCredentials(tt.skipVerify, tt.caCerts, tt.clientCert, tt.clientKey, tt.serverName)
+			creds, err := grpccheckerhelper.BuildCredentialsTLS(tt.caCerts, tt.clientCert, tt.clientKey, tt.serverName)
 			if tt.expectedErr {
 				if err == nil {
 					t.Fatalf("buildCredentials(%v, %q, %q, %q, %q) did not return an error", tt.skipVerify, tt.caCerts, tt.clientCert, tt.clientKey, tt.serverName)
@@ -219,7 +220,7 @@ func TestProcessGRPCHealthCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			checker := newGRPCChecker(tt.c).(*grpcChecker)
 
-			actualStatus := checker.processGRPCHealthCheck(tt.ctx, tt.healthClient)
+			actualStatus := checker.check()
 
 			if actualStatus.msg != tt.expectedStatusMsg {
 				t.Fatalf("%s:returned status message %q, expected %q", tt.name,

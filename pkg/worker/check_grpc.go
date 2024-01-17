@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	grpcchecker "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
+	"github.com/jhump/protoreflect/grpcreflect"
+	grpccheckerhelper "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"math"
+	"os"
 	"strings"
 	"time"
 
@@ -38,9 +42,6 @@ func (checker *grpcChecker) processGRPCError(testStatus testStatus, c SyntheticC
 type grpcChecker struct {
 	c            SyntheticCheck
 	respStr      string
-	respStatus   string
-	respError    string
-	reflections  map[string]interface{}
 	respTrailers metadata.MD
 	timers       map[string]float64
 	testBody     map[string]interface{}
@@ -52,8 +53,6 @@ func newGRPCChecker(c SyntheticCheck) protocolChecker {
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",
-		respStatus: "",
-		respError:  "",
 		timers:     make(map[string]float64),
 		testBody:   make(map[string]interface{}),
 		assertions: make([]map[string]string, 0),
@@ -111,53 +110,290 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	checker.attrs.PutStr("assertions", string(resultStr))
 	return testStatus
 }
+func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
+	cnts := time.Now()
+	newMD := metadata.MD{}
+	for _, v := range checker.c.Request.GRPCPayload.Metadata {
+		newMD.Set(v.Name, v.Value)
+	}
+	healthClient := healthpb.NewHealthClient(cc)
+	rpcCtx := metadata.NewOutgoingContext(ctx, newMD)
+	checker.timers["connect"] = timeInMs(time.Since(cnts))
+	_d0 := time.Now()
+	resp, err := healthClient.Check(rpcCtx,
+		&healthpb.HealthCheckRequest{Service: checker.c.Request.GRPCPayload.Service},
+		//grpc.Header(&newMD), grpc.Trailer(&newMD),
+	)
 
+	checker.timers["resolve"] = timeInMs(time.Since(_d0))
+
+	if err != nil {
+		t := testStatus{
+			status: testStatusError,
+			msg: err.Error(),
+		}
+		checker.testBody["error"] = t.msg
+		checker.processGRPCError(t, checker.c)
+		return t
+	}
+	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
+		t := testStatus{
+			status: testStatusFail,
+			msg: fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String()),
+		}
+		checker.testBody["error"] = t.msg
+		checker.processGRPCError(t, checker.c)
+		return t
+	}
+	return testStatus{
+		status: testStatusOK,
+	}
+}
+func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
+	var (
+		refClient *grpcreflect.Client
+		reflections = make(map[string]interface{}, 0)
+		cnts = time.Now()
+		addlHeaders = make([]string, 0)
+		reflHeaders = make([]string, 0)
+	)
+
+	metaData := grpccheckerhelper.MetadataFromHeaders(append(addlHeaders, reflHeaders...))
+	refCtx := metadata.NewOutgoingContext(ctx, metaData)
+	refClient = grpcreflect.NewClientAuto(refCtx, cc)
+
+	reset := func() {
+		if refClient != nil {
+			refClient.Reset()
+			refClient = nil
+		}
+		if cc != nil {
+			cc.Close()
+			cc = nil
+		}
+	}
+	defer reset()
+
+	listSvc, err := refClient.ListServices()
+	if err != nil {
+		t := testStatus{
+			status: testStatusError,
+			msg: err.Error(),
+		}
+		checker.processGRPCError(t, checker.c)
+		return t
+	}
+	checker.timers["connect"] = timeInMs(time.Since(cnts))
+	d0 := time.Now()
+	for _, svc := range listSvc {
+		fc, _ := refClient.FileContainingSymbol(svc)
+		for _, fSrv := range fc.GetServices() {
+			for _, mtd := range fSrv.GetMethods() {
+				if strings.Contains(fSrv.GetFullyQualifiedName(), "grpc.reflection.") {
+					continue
+				}
+				methodKey := fmt.Sprintf("%s/%s", fSrv.GetFullyQualifiedName(), mtd.GetName())
+				fieldParams := make(map[string]interface{})
+				method := fSrv.FindMethodByName(mtd.GetName())
+				inputType := method.GetInputType()
+				if inputType != nil {
+					for _, field := range inputType.GetFields() {
+						fieldParams[field.GetName()] = field.GetDefaultValue()
+					}
+				}
+				reflections[methodKey] = fieldParams
+			}
+		}
+	}
+	checker.timers["resolve"] = timeInMs(time.Since(d0))
+	checker.testBody["reflections"] = reflections
+
+	return testStatus{
+		status: testStatusOK,
+	}
+}
+func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
+
+	var (
+		descSource  grpccheckerhelper.DescriptorSource
+		refClient   *grpcreflect.Client
+		fileSource  grpccheckerhelper.DescriptorSource
+		c           = checker.c
+		_d0         = time.Now()
+		addlHeaders = make([]string, 0)
+		rpcHeaders  = make([]string, 0)
+		symbol      = c.Request.GRPCPayload.MethodSelection
+	)
+
+	if c.Request.GRPCPayload.ProtoFileContent != "" {
+		var err error
+		fileSource, err = grpccheckerhelper.DescriptorSourceFromProtoFileContent(c.Request.GRPCPayload.ProtoFileContent)
+		if err != nil {
+			t := testStatus{
+				msg:    err.Error(),
+				status: testStatusError,
+			}
+			checker.timers["connect"] = timeInMs(time.Since(_d0))
+			checker.timers["resolve"] = timeInMs(time.Since(time.Now()))
+			checker.testBody["error"] = t.msg
+			checker.processGRPCError(t, checker.c)
+			return t
+		}
+	}
+
+	if len(c.Request.GRPCPayload.Metadata) > 0 {
+		for _, v := range c.Request.GRPCPayload.Metadata {
+			rpcHeaders = append(rpcHeaders, fmt.Sprintf("%s:%s", v.Name, v.Value))
+		}
+	}
+
+	hmd := grpccheckerhelper.MetadataFromHeaders(append(addlHeaders, rpcHeaders...))
+	refCtx := metadata.NewOutgoingContext(ctx, hmd)
+	refClient = grpcreflect.NewClientAuto(refCtx, cc)
+	reflSource := grpccheckerhelper.DescriptorSourceFromServer(ctx, refClient)
+	if fileSource != nil {
+		descSource = grpccheckerhelper.CompositeSource{
+			Reflection: reflSource,
+			File:       fileSource,
+		}
+	} else {
+		descSource = reflSource
+	}
+
+	reset := func() {
+		if refClient != nil {
+			refClient.Reset()
+			refClient = nil
+		}
+		if cc != nil {
+			cc.Close()
+			cc = nil
+		}
+	}
+	defer reset()
+
+
+	if symbol == "" {
+		_, err := descSource.FindSymbol(symbol)
+		if err != nil {
+			checker.timers["connect"] = timeInMs(time.Since(_d0))
+			checker.timers["resolve"] = timeInMs(time.Since(time.Now()))
+			t := testStatus{
+				status: testStatusError,
+				msg:    fmt.Sprintf("failed to resolve symbol %s", symbol),
+			}
+			checker.testBody["error"] = t.msg
+			checker.processGRPCError(t, checker.c)
+			return t
+		}
+	}
+
+	var messageReader *strings.Reader
+	if c.Request.GRPCPayload.Message != "" {
+		messageReader = strings.NewReader(fmt.Sprintf("%s", c.Request.GRPCPayload.Message))
+	}
+
+	options := grpccheckerhelper.FormatOptions{
+		EmitJSONDefaultFields: false,
+		IncludeTextSeparator:  true,
+		AllowUnknownFields:    false,
+	}
+	rf, formatter, err := grpccheckerhelper.RequestParserAndFormatter("json", descSource, messageReader, options)
+	if err != nil {
+		checker.timers["connect"] = timeInMs(time.Since(_d0))
+		checker.timers["resolve"] = timeInMs(time.Since(time.Now()))
+		t := testStatus{
+			status: testStatusError,
+			msg:    fmt.Sprintf("failed to construct request parser and formatter for %q: %v", "json", err),
+		}
+		checker.testBody["error"] = t.msg
+		checker.processGRPCError(t, checker.c)
+		return t
+	}
+
+	h := &grpccheckerhelper.DefaultEventHandler{
+		Out:            os.Stdout,
+		Formatter:      formatter,
+		VerbosityLevel: 0,
+		ConnectStart: _d0,
+	}
+
+
+	invoke := grpccheckerhelper.DynamicInvokeRPC(ctx, descSource, cc, symbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
+
+	checker.timers["resolve"] = invoke.ResolveTs
+	checker.respStr = strSensitise(invoke.MessageRPC)
+	checker.respTrailers = invoke.RespTrailers
+	checker.testBody["body"] = checker.respStr
+	checker.timers["connect"] = invoke.ConnectTs
+
+	t := testStatus{
+		status: invoke.Status,
+	}
+	if invoke.Error != nil {
+		t.msg = invoke.Error.Error()
+		t.status = testStatusError
+
+		checker.testBody["body"] = t.msg
+		checker.testBody["error"] = t.msg
+
+		checker.processGRPCError(t, checker.c)
+		return t
+	}
+	return testStatus{
+		status: testStatusOK,
+	}
+}
 func (checker *grpcChecker) check() testStatus {
 	c := checker.c
-	testReq := c.CheckTestRequest.URL != ""
 	ctx, cnlFnc := context.WithCancel(context.Background())
 	defer cnlFnc()
 	_start := time.Now()
-	rsp := grpcchecker.RequestRPC(grpcchecker.CheckerOptions{
-		Ctx:                   ctx,
-		IgnoreCert:            true,
-		Target:                fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
-		Reflection:            c.Request.GRPCPayload.ServiceDefinition == "reflection",
-		ServiceMethodSymbol:   c.Request.GRPCPayload.MethodSelection,
-		ServiceRequestMessage: c.Request.GRPCPayload.Message,
-		TimeoutSec:            c.Expect.ResponseTimeLessThen,
-		ProtoFileContent:      c.Request.GRPCPayload.ProtoFileContent,
+
+	clientGRPC, err := grpccheckerhelper.NewClientGRPC(ctx, grpccheckerhelper.ClientDialOptions{
+		Target:      fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
+		TimeoutSec:  float64(c.Expect.ResponseTimeLessThen),
+		Certificate: c.Request.GRPCPayload.Certificate,
+		PrivateKey:  c.Request.GRPCPayload.PrivateKey,
+		IgnoreCert:  c.Request.GRPCPayload.IgnoreServerCertificateError,
 	})
-	rsp.MessageRPC = strSensitise(rsp.MessageRPC)
+	checker.timers["connection"] = timeInMs(time.Since(_start))
+
+	if err != nil {
+		_t := testStatus{
+			status: testStatusError,
+			msg:    err.Error(),
+		}
+		checker.testBody["body"] = _t.msg
+		checker.testBody["error"] = _t.msg
+		checker.processGRPCError(_t, c)
+		return _t
+	}
+
+	if c.Request.GRPCPayload.ServiceDefinition == "reflection" {
+		t := checker.reflectionCheckGRPC(ctx, clientGRPC)
+		checker.timers["duration"] = timeInMs(time.Since(_start))
+		if t.status == testStatusOK {
+			return checker.fillGRPCAssertions()
+		}
+		return t
+	}
+
+	if c.Request.GRPCPayload.CheckType == "health" {
+		t := checker.healthCheckGRPC(ctx, clientGRPC)
+		checker.timers["duration"] = timeInMs(time.Since(_start))
+		if t.status == testStatusOK {
+			return checker.fillGRPCAssertions()
+		}
+		return t
+	}
+
+	t := checker.behaviourCheckGRPC(ctx, clientGRPC)
 	checker.timers["duration"] = timeInMs(time.Since(_start))
-	checker.timers["connection"] = rsp.ConnectionTs
-	checker.timers["connect"] = rsp.ConnectTs
-	_d0 := time.Now()
-	if rsp.ResolveTs < 1 {
-		rsp.ResolveTs = timeInMs(time.Since(_d0))
+	if t.status == testStatusOK {
+		return checker.fillGRPCAssertions()
 	}
-	checker.timers["resolve"] = rsp.ResolveTs
-	checker.reflections = rsp.Reflections
-	checker.respStatus = rsp.Status
-	checker.respStr = rsp.MessageRPC
-	checker.respTrailers = rsp.RespTrailers
-
-	testStatus := testStatus{
-		status: rsp.Status,
-	}
-	if rsp.Error != nil {
-		testStatus.msg = rsp.Error.Error()
-		checker.testBody["body"] = testStatus.msg
-		checker.testBody["error"] = testStatus.msg
-		checker.processGRPCError(testStatus, c)
-		return testStatus
-	}
-
-	if !testReq {
-		testStatus = checker.fillGRPCAssertions()
-		checker.testBody["body"] = testStatus.msg
-	}
-	return testStatus
+	return t
 }
 
 func (checker *grpcChecker) getTimers() map[string]float64 {
@@ -171,10 +407,6 @@ func (checker *grpcChecker) getAttrs() pcommon.Map {
 func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	checker.testBody["reflections"] = make(map[string]interface{}, 0)
-	if checker.c.SyntheticsModel.Request.GRPCPayload.ServiceDefinition == "reflection" {
-		checker.testBody["reflections"] = checker.reflections
-	}
 	if checker.testBody["body"] == "" && checker.respStr != "" {
 		checker.testBody["body"] = checker.respStr
 	}
