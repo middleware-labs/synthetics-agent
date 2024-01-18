@@ -6,34 +6,31 @@ import (
 )
 
 type SyntheticsModel struct {
-	Id               int                      `json:"id"`
-	AccountId        int                      `json:"account_id"`
-	UserId           int                      `json:"user_id"`
-	Proto            string                   `json:"proto"`
-	SlugName         string                   `json:"slug_name"`
-	Endpoint         string                   `json:"endpoint"`
-	IntervalSeconds  int                      `json:"interval_seconds"`
-	Locations        string                   `json:"locations"`
-	Status           string                   `json:"status"`
-	Tags             []string                 `json:"tags"`
-	Expect           SyntheticsExpectMeta     `json:"expect"`
-	Request          SyntheticsRequestOptions `json:"request"`
-	CreatedAt        time.Time                `json:"created_at"`
-	UpdatedAt        time.Time                `json:"updated_at"`
-	Action           string                   `json:"action"`
-	AccountKey       string                   `json:"account_key"`
-	AccountUID       string                   `json:"account_uid"`
-	Details          map[string]interface{}   `json:"details"`
-	CheckTestRequest CheckTestRequest         `json:"check_test_request"`
+	Id                int                      `json:"id"`
+	AccountId         int                      `json:"account_id"`
+	UserId            int                      `json:"user_id"`
+	Proto             string                   `json:"proto"`
+	SlugName          string                   `json:"slug_name"`
+	Endpoint          string                   `json:"endpoint"`
+	IntervalSeconds   int                      `json:"interval_seconds"`
+	Locations         string                   `json:"locations"`
+	Status            string                   `json:"status"`
+	Tags              []string                 `json:"tags"`
+	Expect            SyntheticsExpectMeta     `json:"expect"`
+	Request           SyntheticsRequestOptions `json:"request"`
+	CreatedAt         time.Time                `json:"created_at"`
+	UpdatedAt         time.Time                `json:"updated_at"`
+	Action            string                   `json:"action"`
+	AccountKey        string                   `json:"account_key"`
+	AccountUID        string                   `json:"account_uid"`
+	Details           map[string]interface{}   `json:"details"`
+	AdditionalOptions interface{}              `json:"additional_options"`
+	CheckTestRequest  CheckTestRequest         `json:"check_test_request"`
+	ProjectId         int                      `json:"project_id"`
+	ProjectUID        string                   `json:"project_uid"`
+	K6ScriptSnippet   string                   `json:"k6_script_snippet"`
 }
 
-type CheckTestRequestHeaders struct {
-	Authorization string `json:"authorization"`
-	AccountID     int    `json:"account_id"`
-	AccountUID    string `json:"account_uid"`
-	UserId        int    `json:"user_id"`
-	CheckId       int    `json:"check_id"`
-}
 type CheckTestRequest struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
@@ -80,18 +77,16 @@ type SyntheticsRequestOptions struct {
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
 }
 
-type HTTPMultiStepsRequest struct {
-	HTTPMethod  string               `json:"http_method"`
-	HTTPVersion string               `json:"http_version"`
-	HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
-	HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
-}
-
 type HTTPMultiStepsOptions struct {
 	StepName string               `json:"step_name"`
 	Endpoint string               `json:"endpoint"`
 	Expect   SyntheticsExpectMeta `json:"expect"`
-	Request  HTTPMultiStepsRequest `json:"request"`
+	Request  struct {
+		HTTPMethod  string               `json:"http_method"`
+		HTTPVersion string               `json:"http_version"`
+		HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
+		HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
+	} `json:"request"`
 }
 
 type SyntheticsTags struct {
@@ -104,64 +99,6 @@ type HTTPHeadersOptions struct {
 	Value string `json:"value"`
 }
 
-type ClientCertificate struct {
-	Certificate string `json:"certificate"`
-	PrivateKey  string `json:"private_key"`
-}
-
-type Basic struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type Digest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type Ntlm struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	Domain      string `json:"domain"`
-	WorkStation string `json:"work_station"`
-}
-
-type AwsSignature struct {
-	AccessKeyID     string `json:"access_key_id"`
-	SecretAccessKey string `json:"secret_access_key"`
-	Region          string `json:"region"`
-	ServiceName     string `json:"service_name"`
-	SessionToken    string `json:"session_token"`
-}
-	
-type Oauth21 struct {
-		CredentialsType        string `json:"credentials_type"`
-		TokenAPIAuthentication string `json:"token_api_authentication"`
-		AccessTokenURL         string `json:"access_token_url"`
-		Username               string `json:"username"`
-		Password               string `json:"password"`
-		ClientID               string `json:"client_id"`
-		ClientSecret           string `json:"client_secret"`
-		Audience               string `json:"audience"`
-		Resource               string `json:"resource"`
-		Scopes                 string `json:"scopes"`
-}
-
-type Authentication struct {
-	ClientCertificate ClientCertificate `json:"client_certificate"`
-	Type  string `json:"type"`
-	Basic Basic `json:"basic"`
-	Digest Digest`json:"digest"`
-	Ntlm Ntlm `json:"ntlm"`
-	AwsSignature AwsSignature `json:"aws_signature"`
-	Oauth21 Oauth21`json:"oauth2_1"`
-}
-
-type RequestBody struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
-}
-
 type HTTPPayloadOptions struct {
 	FollowRedirects              bool   `json:"follow_redirects"`
 	IgnoreServerCertificateError bool   `json:"ignore_server_certificate_error"`
@@ -170,7 +107,10 @@ type HTTPPayloadOptions struct {
 		Name  string `json:"name"`
 		Value string `json:"value"`
 	} `json:"query_params"`
-	RequestBody RequestBody `json:"request_body"`
+	RequestBody struct {
+		Type    string `json:"type"`
+		Content string `json:"content"`
+	} `json:"request_body"`
 	Privacy struct {
 		SaveBodyResponse bool `json:"save_body_response"`
 	} `json:"privacy"`
@@ -181,7 +121,46 @@ type HTTPPayloadOptions struct {
 			Value string `json:"value"`
 		} `json:"headers"`
 	} `json:"proxy"`
-	Authentication Authentication `json:"authentication"`
+	Authentication struct {
+		ClientCertificate struct {
+			Certificate string `json:"certificate"`
+			PrivateKey  string `json:"private_key"`
+		} `json:"client_certificate"`
+		Type  string `json:"type"`
+		Basic struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"basic"`
+		Digest struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		} `json:"digest"`
+		Ntlm struct {
+			Username    string `json:"username"`
+			Password    string `json:"password"`
+			Domain      string `json:"domain"`
+			WorkStation string `json:"work_station"`
+		} `json:"ntlm"`
+		AwsSignature struct {
+			AccessKeyID     string `json:"access_key_id"`
+			SecretAccessKey string `json:"secret_access_key"`
+			Region          string `json:"region"`
+			ServiceName     string `json:"service_name"`
+			SessionToken    string `json:"session_token"`
+		} `json:"aws_signature"`
+		Oauth21 struct {
+			CredentialsType        string `json:"credentials_type"`
+			TokenAPIAuthentication string `json:"token_api_authentication"`
+			AccessTokenURL         string `json:"access_token_url"`
+			Username               string `json:"username"`
+			Password               string `json:"password"`
+			ClientID               string `json:"client_id"`
+			ClientSecret           string `json:"client_secret"`
+			Audience               string `json:"audience"`
+			Resource               string `json:"resource"`
+			Scopes                 string `json:"scopes"`
+		} `json:"oauth2_1"`
+	} `json:"authentication"`
 }
 
 type ICMPPayloadOptions struct {
@@ -207,20 +186,17 @@ type GRPCPayloadOptions struct {
 type UDPPayloadOptions struct {
 	Message string `json:"message"`
 }
-type WSPayloadHeaders struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
-type WSPayloadAuthentication struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
 
 type WSPayloadOptions struct {
-	Message        string                  `json:"message"`
-	Headers        []WSPayloadHeaders      `json:"headers"`
-	Authentication WSPayloadAuthentication `json:"authentication"`
+	Message string `json:"message"`
+	Headers []struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	} `json:"headers"`
+	Authentication struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"authentication"`
 }
 
 type SpecifyFrequencyOptions struct {
@@ -265,13 +241,16 @@ type AlertConditionsOptions struct {
 }
 
 type MonitorOptions struct {
-	Source                  string        `json:"source"` // slack, email, webhook, etc
-	NotifyTo                []interface{} `json:"notify_to"`
-	Renotify                bool          `json:"renotify"`
-	RenotifyIntervalSeconds int           `json:"renotify_interval_seconds"`
-	Priority                string        `json:"priority"`
-	TriggerFailsCase        bool          `json:"trigger_fails_case"`
-	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
+	Source                  string                   `json:"source"` // slack, email, webhook, etc
+	NotifyTo                []interface{}            `json:"notify_to"`
+	Renotify                bool                     `json:"renotify"`
+	RenotifyIntervalSeconds int                      `json:"renotify_interval_seconds"`
+	Priority                string                   `json:"priority"`
+	TriggerFailsCase        bool                     `json:"trigger_fails_case"`
+	TriggerFailsCaseCount   int                      `json:"trigger_fails_case_count"`
+	SelectedSource          string                   `json:"selected_source"`
+	NotifyBySource          map[string][]interface{} `json:"notify_by_source"`
+	NotifySourceAdditional  map[string]interface{}   `json:"notify_source_additional"`
 }
 
 func timeInMs(t time.Duration) float64 {
