@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -125,7 +126,9 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 		}
 
 		v := unsubscribePayload{}
+		log.Printf("unsub payload str %s", string(msg.Payload))
 		err = json.Unmarshal(msg.Payload, &v)
+		log.Printf("unsub payload %v", v)
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
 			continue
@@ -234,7 +237,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 
 		if ok && messages[msg.Key].MsgId == msg.MsgId {
 			refresh = true
-			//log.Printf("[%d] job refresh key:%s ", v.Id, msg.Key)
+			log.Printf("[%d] job refresh key:%s ", v.Id, msg.Key)
 		} else if ok && messages[msg.Key].MsgId != msg.MsgId {
 			slog.Info("job update", slog.String("key", msg.Key))
 			err := consumer.Ack(context.Background(), messages[msg.Key])
