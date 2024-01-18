@@ -76,7 +76,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 					" " + fmt.Sprintf("%v", assert.Config.Value)
 				ck["status"] = testStatusOK
 
-				if !assertInt(int64(dur), assert) {
+				if !assertFloat(dur, assert) {
 					ck["status"] = testStatusFail
 					testStatus.status = testStatusFail
 					testStatus.msg = "assert failed, response_time didn't matched"
@@ -110,7 +110,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 			"type": assertTypeUDPResponseTime,
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+				"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 			},
 		},
 	}

@@ -83,7 +83,7 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 				"type": assertTypeTCPResponseTime,
 				"config": map[string]string{
 					"operator": "less_than",
-					"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+					"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 				},
 			},
 		}
@@ -106,7 +106,7 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 		case "response_time":
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] += ck["reason"] + "ms"
-			if !assertInt(int64(checker.timers["duration"]), assert) {
+			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
 				testStatus.status = testStatusFail
 				testStatus.msg = "assert failed, response_time didn't matched"

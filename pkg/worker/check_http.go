@@ -228,7 +228,7 @@ func (checker *httpChecker) processHTTPResponse() {
 			"type": "response_time",
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+				"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 			},
 		},
 	}
@@ -382,7 +382,7 @@ func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
 
 	assertions["actual"] = fmt.Sprintf("%v", responseTime)
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
-	if !assertInt(int64(responseTime), assert) {
+	if !assertFloat(responseTime, assert) {
 		testStatus.status = testStatusFail
 		testStatus.msg = "assert failed, response_time didn't matched"
 		assertions["status"] = testStatusFail

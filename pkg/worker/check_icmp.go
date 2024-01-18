@@ -235,7 +235,7 @@ func (checker *icmpChecker) check() testStatus {
 		switch v.Type {
 		case assertTypeICMPLatency:
 			ck["actual"] = fmt.Sprintf("%f", checker.timers["rtt"])
-			if !assertInt(int64(checker.timers["duration"]), v) {
+			if !assertFloat(checker.timers["duration"], v) {
 				ck["status"] = testStatusFail
 				testStatus.status = testStatusFail
 				testStatus.msg = fmt.Sprintf("latency didn't matched %s", c.Endpoint)

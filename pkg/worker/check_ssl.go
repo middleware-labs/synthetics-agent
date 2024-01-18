@@ -94,7 +94,7 @@ func (checker *sslChecker) processSSLResponse(testStatus testStatus) {
 		"type": assertTypeSSLResponseTime,
 		"config": map[string]string{
 			"operator": "less_than",
-			"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+			"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 		},
 	})
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
@@ -157,7 +157,7 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 				strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 				" " + assert.Config.Value + " ms"
 			assertChecker["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
-			if !assertInt(int64(checker.timers["duration"]), assert) {
+			if !assertFloat(checker.timers["duration"], assert) {
 				testStatus.status = testStatusFail
 				testStatus.msg = "assert failed, response_time didn't matched"
 

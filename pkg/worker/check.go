@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"runtime"
@@ -113,6 +114,32 @@ func assertInt(data int64, assert CaseOptions) bool {
 		return false
 	}
 	return true
+}
+
+func assertFloat(data float64, assert CaseOptions) bool {
+	in, err := strconv.ParseFloat(assert.Config.Value, 64)
+	if err != nil {
+		return false
+	}
+	if (assert.Config.Operator == "is" || assert.Config.Operator == "equal") && in != data {
+		return false
+	}
+	if assert.Config.Operator == "less_than" && data >= in {
+		return false
+	}
+	if assert.Config.Operator == "greater_than" && data <= in {
+		return false
+	}
+	return true
+}
+
+func percentCalc(val float64, percent float64) float64 {
+	float := (val * (percent / 100)) + val
+	f2d, err := strconv.ParseFloat(fmt.Sprintf("%.2f", float), 64)
+	if err != nil {
+		return float
+	}
+	return f2d
 }
 
 func (cs *CheckState) testFire() (map[string]interface{}, error) {

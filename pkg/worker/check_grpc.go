@@ -8,7 +8,6 @@ import (
 	grpccheckerhelper "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"math"
 	"os"
 	"strings"
 	"time"
@@ -77,7 +76,7 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 		switch assert.Type {
 		case string(grpcResponseTime):
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
-			if !assertInt(int64(checker.timers["duration"]), assert) {
+			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
 				testStatus.status = testStatusFail
 				testStatus.msg = "duration did not match with the condition"
@@ -416,7 +415,7 @@ func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 			"type": grpcResponseTime,
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", math.Floor(checker.timers["duration"]*0.4+checker.timers["duration"])),
+				"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 			},
 		},
 	}

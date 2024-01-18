@@ -221,7 +221,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["status"] = testStatusOK
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] = "response time assertion passed"
-			if !assertInt(int64(checker.timers["duration"]), assert) {
+			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
 				ck["reason"] = "response time assertion failed"
 			}
@@ -354,7 +354,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 			"type": assertTypeDNSResponseTime,
 			"config": map[string]string{
 				"operator": "less_than",
-				"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+				"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 			},
 		},
 	}

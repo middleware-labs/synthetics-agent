@@ -141,7 +141,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 		case assertTypeWSResponseTime:
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + fmt.Sprintf("%v", assert.Config.Value)
-			if !assertInt(int64(checker.timers["duration"]), assert) {
+			if !assertFloat(checker.timers["duration"], assert) {
 				testStatus.status = testStatusFail
 				testStatus.msg = "response time not matched with the condition"
 				ck["status"] = testStatus.status
@@ -219,7 +219,7 @@ func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http
 		"type": assertTypeWSResponseTime,
 		"config": map[string]string{
 			"operator": "less_than",
-			"value":    fmt.Sprintf("%v", checker.timers["duration"]*0.4+checker.timers["duration"]),
+			"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 		},
 	})
 	assertions = append(assertions, map[string]interface{}{
