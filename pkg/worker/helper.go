@@ -1,39 +1,36 @@
 // DO NOT EDIT.. COPY FROM bifrost/app/components/synthetics/helper.go
-package synthetics_agent
+package worker
 
 import (
 	"time"
 )
 
 type SyntheticsModel struct {
-	Id               int                      `json:"id"`
-	AccountId        int                      `json:"account_id"`
-	UserId           int                      `json:"user_id"`
-	Proto            string                   `json:"proto"`
-	SlugName         string                   `json:"slug_name"`
-	Endpoint         string                   `json:"endpoint"`
-	IntervalSeconds  int                      `json:"interval_seconds"`
-	Locations        string                   `json:"locations"`
-	Status           string                   `json:"status"`
-	Tags             []string                 `json:"tags"`
-	Expect           SyntheticsExpectMeta     `json:"expect"`
-	Request          SyntheticsRequestOptions `json:"request"`
-	CreatedAt        time.Time                `json:"created_at"`
-	UpdatedAt        time.Time                `json:"updated_at"`
-	Action           string                   `json:"action"`
-	AccountKey       string                   `json:"account_key"`
-	AccountUID       string                   `json:"account_uid"`
-	Details          map[string]interface{}   `json:"details"`
-	CheckTestRequest CheckTestRequest         `json:"check_test_request"`
+	Id                int                      `json:"id"`
+	AccountId         int                      `json:"account_id"`
+	UserId            int                      `json:"user_id"`
+	Proto             string                   `json:"proto"`
+	SlugName          string                   `json:"slug_name"`
+	Endpoint          string                   `json:"endpoint"`
+	IntervalSeconds   int                      `json:"interval_seconds"`
+	Locations         string                   `json:"locations"`
+	Status            string                   `json:"status"`
+	Tags              []string                 `json:"tags"`
+	Expect            SyntheticsExpectMeta     `json:"expect"`
+	Request           SyntheticsRequestOptions `json:"request"`
+	CreatedAt         time.Time                `json:"created_at"`
+	UpdatedAt         time.Time                `json:"updated_at"`
+	Action            string                   `json:"action"`
+	AccountKey        string                   `json:"account_key"`
+	AccountUID        string                   `json:"account_uid"`
+	Details           map[string]interface{}   `json:"details"`
+	AdditionalOptions interface{}              `json:"additional_options"`
+	CheckTestRequest  CheckTestRequest         `json:"check_test_request"`
+	ProjectId         int                      `json:"project_id"`
+	ProjectUID        string                   `json:"project_uid"`
+	K6ScriptSnippet   string                   `json:"k6_script_snippet"`
 }
 
-type CheckTestRequestHeaders struct {
-	Authorization string `json:"authorization"`
-	AccountID     int    `json:"account_id"`
-	AccountUID    string `json:"account_uid"`
-	UserId        int    `json:"user_id"`
-	CheckId       int    `json:"check_id"`
-}
 type CheckTestRequest struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
@@ -244,11 +241,18 @@ type AlertConditionsOptions struct {
 }
 
 type MonitorOptions struct {
-	Source                  string        `json:"source"` // slack, email, webhook, etc
-	NotifyTo                []interface{} `json:"notify_to"`
-	Renotify                bool          `json:"renotify"`
-	RenotifyIntervalSeconds int           `json:"renotify_interval_seconds"`
-	Priority                string        `json:"priority"`
-	TriggerFailsCase        bool          `json:"trigger_fails_case"`
-	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
+	Source                  string                   `json:"source"` // slack, email, webhook, etc
+	NotifyTo                []interface{}            `json:"notify_to"`
+	Renotify                bool                     `json:"renotify"`
+	RenotifyIntervalSeconds int                      `json:"renotify_interval_seconds"`
+	Priority                string                   `json:"priority"`
+	TriggerFailsCase        bool                     `json:"trigger_fails_case"`
+	TriggerFailsCaseCount   int                      `json:"trigger_fails_case_count"`
+	SelectedSource          string                   `json:"selected_source"`
+	NotifyBySource          map[string][]interface{} `json:"notify_by_source"`
+	NotifySourceAdditional  map[string]interface{}   `json:"notify_source_additional"`
+}
+
+func timeInMs(t time.Duration) float64 {
+	return float64(t) / float64(time.Millisecond)
 }
