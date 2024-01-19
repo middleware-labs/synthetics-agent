@@ -9,21 +9,13 @@ import (
 	"net/url"
 	"time"
 
+	"log/slog"
+
 	"github.com/cenkalti/backoff"
 	"github.com/gorilla/websocket"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
-func init() {
-	// Use timestamp rather than time string.
-	zerolog.TimeFieldFormat = ""
-}
-
 var (
-	DefaultLogger   = log.Logger
-	DefaultLogLevel = zerolog.InfoLevel
-
 	pingInterval = 10 * time.Second
 	pingTimeout  = 5 * time.Second
 	pongTimeout  = 5 * time.Second
@@ -356,14 +348,12 @@ func (r *reader) Close() error {
 // Use New to initialize the client with the default configuration.
 type Client struct {
 	URL    string
-	Logger zerolog.Logger
-
 	dialer *websocket.Dialer
 }
 
 func (c *Client) isRetryableError(err error) bool {
-	c.Logger.Debug().Err(err).Msgf("%#T %#v", err, err)
-
+	slog.Debug("isRetryableError", slog.String("error",
+		fmt.Sprintf("%#T %#v", err, err)))
 	// Websocket-specific.
 	if websocket.IsCloseError(err,
 		websocket.CloseGoingAway,
@@ -388,7 +378,7 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 		if !c.isRetryableError(err) {
 			return nil, err
 		}
-		c.Logger.Debug().Msg("reconnecting")
+		slog.Debug("reconnecting", slog.String("error", err.Error()))
 	}
 
 	var w *websocket.Conn
@@ -409,7 +399,7 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 	err = backoff.Retry(func() error {
 		w, _, err = c.dialer.Dial(url, nil)
 		if err != nil {
-			c.Logger.Error().Err(err).Msg("dial")
+			slog.Error("dial", slog.String("error", err.Error()))
 		}
 		return err
 	}, o)
@@ -451,7 +441,7 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 		}()
 	*/
 
-	c.Logger.Debug().Msg("connected")
+	slog.Debug("connected")
 	return w, nil
 }
 
@@ -504,8 +494,7 @@ func (c *Client) Reader(topic string, params Params) (Reader, error) {
 // New initializes a new client.
 func New(url string) *Client {
 	return &Client{
-		URL:    url,
-		Logger: DefaultLogger.Level(DefaultLogLevel),
+		URL: url,
 		dialer: &websocket.Dialer{
 			Proxy:            http.ProxyFromEnvironment,
 			HandshakeTimeout: 30 * time.Second,
