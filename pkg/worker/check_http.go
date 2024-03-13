@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -105,8 +106,9 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if c.Request.HTTPPayload.Authentication.Type == "basic" &&
 		c.Request.HTTPPayload.Authentication.Basic.Username != "" &&
 		c.Request.HTTPPayload.Authentication.Basic.Password != "" {
-		req.Header.Set("Authorization", c.Request.HTTPPayload.Authentication.Basic.Username+
-			":"+c.Request.HTTPPayload.Authentication.Basic.Password)
+		auth := c.Request.HTTPPayload.Authentication.Basic.Username + ":" + c.Request.HTTPPayload.Authentication.Basic.Password
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+		req.Header.Set("Authorization", "Basic "+encodedAuth)
 	}
 
 	if digest && c.Request.HTTPPayload.Authentication.Type == "digest" &&

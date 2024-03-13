@@ -250,7 +250,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 						sOk = check(response, {
 							['status contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) > -1,
 						})
-					} else if (_op === "not_contains") {
+					} else if (_op === "not_contains" || _op === "does_not_contain") {
 						sOk = check(response, {
 							['status not contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) === -1,
 						})
