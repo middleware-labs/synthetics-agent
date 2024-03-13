@@ -81,7 +81,7 @@ func assertString(data string, assert CaseOptions) bool {
 	if assert.Config.Operator == "contains" && !strings.Contains(data, assert.Config.Value) {
 		return false
 	}
-	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains") && strings.Index(data, assert.Config.Value) >= 0 {
+	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Index(data, assert.Config.Value) >= 0 {
 		return false
 	}
 
@@ -113,6 +113,9 @@ func assertInt(data int64, assert CaseOptions) bool {
 	if assert.Config.Operator == "greater_than" && data <= in {
 		return false
 	}
+	if assert.Config.Operator == "is_not" && data == in {
+		return false
+	}
 	return true
 }
 
@@ -128,6 +131,9 @@ func assertFloat(data float64, assert CaseOptions) bool {
 		return false
 	}
 	if assert.Config.Operator == "greater_than" && data <= in {
+		return false
+	}
+	if assert.Config.Operator == "is_not" && data == in {
 		return false
 	}
 	return true
@@ -177,8 +183,7 @@ func (cs *CheckState) fire() {
 		}
 	}()
 
-	if c.Request.SpecifyFrequency.Type == "advanced" &&
-		c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
+	if c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
 		if err != nil {
@@ -193,14 +198,18 @@ func (cs *CheckState) fire() {
 			}
 		}
 		if allow {
-			start, err := time.ParseInLocation("15:04", c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime, loc)
+			currentDate := time.Now().In(loc)
+			timeFormat := "2006-01-02 15:04"
 
-			if err != nil || time.Now().In(loc).UTC().Unix() < start.UTC().Unix() {
+			startTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(), c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime)
+			start, err := time.ParseInLocation(timeFormat, startTimeAppendDate, loc)
+			if err != nil || currentDate.UTC().Unix() < start.UTC().Unix() {
 				return
 			}
-			end, err := time.ParseInLocation("15:04", c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime, loc)
-
-			if err != nil || time.Now().In(loc).UTC().Unix() > end.UTC().Unix() {
+			
+			endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(), c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
+			end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
+			if err != nil || currentDate.UTC().Unix() > end.UTC().Unix() {
 				return
 			}
 		}
