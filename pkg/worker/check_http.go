@@ -127,7 +127,7 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 				respauth.StatusCode, http.StatusUnauthorized)
 		}
 		parts := digestParts(respauth)
-		parts["uri"] = c.Endpoint
+		parts["uri"] = req.URL.RequestURI()
 		parts["method"] = c.Request.HTTPMethod
 		parts["username"] = c.Request.HTTPPayload.Authentication.Digest.Username
 		parts["password"] = c.Request.HTTPPayload.Authentication.Digest.Password
@@ -145,7 +145,7 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 func digestParts(resp *http.Response) map[string]string {
 	result := map[string]string{}
 	if len(resp.Header["Www-Authenticate"]) > 0 {
-		wantedHeaders := []string{"nonce", "realm", "qop"}
+		wantedHeaders := []string{"nonce", "realm", "qop", "opaque"}
 		responseHeaders := strings.Split(resp.Header["Www-Authenticate"][0], ",")
 		for _, r := range responseHeaders {
 			for _, w := range wantedHeaders {
@@ -581,5 +581,8 @@ func getDigestAuthrization(digestParts map[string]string) string {
 	response := getMD5(fmt.Sprintf("%s:%s:%v:%s:%s:%s", ha1, d["nonce"], nonceCount, cnonce, d["qop"], ha2))
 	authorization := fmt.Sprintf(`Digest username="%s", realm="%s", nonce="%s", uri="%s", cnonce="%s", nc="%v", qop="%s", response="%s"`,
 		d["username"], d["realm"], d["nonce"], d["uri"], cnonce, nonceCount, d["qop"], response)
+	if opaque, ok := d["opaque"]; ok {
+		authorization += fmt.Sprintf(`, opaque="%s"`, opaque)
+	}
 	return authorization
 }
