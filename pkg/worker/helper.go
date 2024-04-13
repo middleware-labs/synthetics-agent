@@ -1,5 +1,5 @@
 // DO NOT EDIT.. COPY FROM bifrost/app/components/synthetics/helper.go
-package synthetics_agent
+package worker
 
 import (
 	"time"
@@ -80,16 +80,18 @@ type SyntheticsRequestOptions struct {
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
 }
 
+type HTTPMultiStepsRequest struct {
+	HTTPMethod  string               `json:"http_method"`
+	HTTPVersion string               `json:"http_version"`
+	HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
+	HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
+}
+
 type HTTPMultiStepsOptions struct {
 	StepName string               `json:"step_name"`
 	Endpoint string               `json:"endpoint"`
 	Expect   SyntheticsExpectMeta `json:"expect"`
-	Request  struct {
-		HTTPMethod  string               `json:"http_method"`
-		HTTPVersion string               `json:"http_version"`
-		HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
-		HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
-	} `json:"request"`
+	Request  HTTPMultiStepsRequest `json:"request"`
 }
 
 type SyntheticsTags struct {
@@ -102,6 +104,64 @@ type HTTPHeadersOptions struct {
 	Value string `json:"value"`
 }
 
+type ClientCertificate struct {
+	Certificate string `json:"certificate"`
+	PrivateKey  string `json:"private_key"`
+}
+
+type Basic struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Digest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type Ntlm struct {
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	Domain      string `json:"domain"`
+	WorkStation string `json:"work_station"`
+}
+
+type AwsSignature struct {
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	Region          string `json:"region"`
+	ServiceName     string `json:"service_name"`
+	SessionToken    string `json:"session_token"`
+}
+	
+type Oauth21 struct {
+		CredentialsType        string `json:"credentials_type"`
+		TokenAPIAuthentication string `json:"token_api_authentication"`
+		AccessTokenURL         string `json:"access_token_url"`
+		Username               string `json:"username"`
+		Password               string `json:"password"`
+		ClientID               string `json:"client_id"`
+		ClientSecret           string `json:"client_secret"`
+		Audience               string `json:"audience"`
+		Resource               string `json:"resource"`
+		Scopes                 string `json:"scopes"`
+}
+
+type Authentication struct {
+	ClientCertificate ClientCertificate `json:"client_certificate"`
+	Type  string `json:"type"`
+	Basic Basic `json:"basic"`
+	Digest Digest`json:"digest"`
+	Ntlm Ntlm `json:"ntlm"`
+	AwsSignature AwsSignature `json:"aws_signature"`
+	Oauth21 Oauth21`json:"oauth2_1"`
+}
+
+type RequestBody struct {
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
 type HTTPPayloadOptions struct {
 	FollowRedirects              bool   `json:"follow_redirects"`
 	IgnoreServerCertificateError bool   `json:"ignore_server_certificate_error"`
@@ -110,10 +170,7 @@ type HTTPPayloadOptions struct {
 		Name  string `json:"name"`
 		Value string `json:"value"`
 	} `json:"query_params"`
-	RequestBody struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
-	} `json:"request_body"`
+	RequestBody RequestBody `json:"request_body"`
 	Privacy struct {
 		SaveBodyResponse bool `json:"save_body_response"`
 	} `json:"privacy"`
@@ -124,46 +181,7 @@ type HTTPPayloadOptions struct {
 			Value string `json:"value"`
 		} `json:"headers"`
 	} `json:"proxy"`
-	Authentication struct {
-		ClientCertificate struct {
-			Certificate string `json:"certificate"`
-			PrivateKey  string `json:"private_key"`
-		} `json:"client_certificate"`
-		Type  string `json:"type"`
-		Basic struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		} `json:"basic"`
-		Digest struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		} `json:"digest"`
-		Ntlm struct {
-			Username    string `json:"username"`
-			Password    string `json:"password"`
-			Domain      string `json:"domain"`
-			WorkStation string `json:"work_station"`
-		} `json:"ntlm"`
-		AwsSignature struct {
-			AccessKeyID     string `json:"access_key_id"`
-			SecretAccessKey string `json:"secret_access_key"`
-			Region          string `json:"region"`
-			ServiceName     string `json:"service_name"`
-			SessionToken    string `json:"session_token"`
-		} `json:"aws_signature"`
-		Oauth21 struct {
-			CredentialsType        string `json:"credentials_type"`
-			TokenAPIAuthentication string `json:"token_api_authentication"`
-			AccessTokenURL         string `json:"access_token_url"`
-			Username               string `json:"username"`
-			Password               string `json:"password"`
-			ClientID               string `json:"client_id"`
-			ClientSecret           string `json:"client_secret"`
-			Audience               string `json:"audience"`
-			Resource               string `json:"resource"`
-			Scopes                 string `json:"scopes"`
-		} `json:"oauth2_1"`
-	} `json:"authentication"`
+	Authentication Authentication `json:"authentication"`
 }
 
 type ICMPPayloadOptions struct {
@@ -189,29 +207,34 @@ type GRPCPayloadOptions struct {
 type UDPPayloadOptions struct {
 	Message string `json:"message"`
 }
+type WSPayloadHeaders struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type WSPayloadAuthentication struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
 
 type WSPayloadOptions struct {
-	Message string `json:"message"`
-	Headers []struct {
-		Name  string `json:"name"`
-		Value string `json:"value"`
-	} `json:"headers"`
-	Authentication struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	} `json:"authentication"`
+	Message        string                  `json:"message"`
+	Headers        []WSPayloadHeaders      `json:"headers"`
+	Authentication WSPayloadAuthentication `json:"authentication"`
+}
+
+type SpecifyTimeRange struct {
+	IsChecked  bool     `json:"is_checked"`
+	StartTime  string   `json:"start_time"`
+	EndTime    string   `json:"end_time"`
+	Timezone   string   `json:"timezone"`
+	DaysOfWeek []string `json:"days_of_week"`
 }
 
 type SpecifyFrequencyOptions struct {
 	Type             string `json:"type"`
 	IntervalType     string `json:"interval_type"`
-	SpecifyTimeRange struct {
-		IsChecked  bool     `json:"is_checked"`
-		StartTime  string   `json:"start_time"`
-		EndTime    string   `json:"end_time"`
-		Timezone   string   `json:"timezone"`
-		DaysOfWeek []string `json:"days_of_week"`
-	} `json:"specify_time_range"`
+	SpecifyTimeRange SpecifyTimeRange `json:"specify_time_range"`
 }
 
 type CaseOptions struct {
@@ -251,4 +274,8 @@ type MonitorOptions struct {
 	Priority                string        `json:"priority"`
 	TriggerFailsCase        bool          `json:"trigger_fails_case"`
 	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
+}
+
+func timeInMs(t time.Duration) float64 {
+	return float64(t) / float64(time.Millisecond)
 }

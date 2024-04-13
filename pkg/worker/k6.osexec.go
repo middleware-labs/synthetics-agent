@@ -1,8 +1,7 @@
-package synthetics_agent
+package worker
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +9,12 @@ import (
 	"regexp"
 	"strings"
 )
+
+type k6Scripter interface {
+	execute(scriptSnippet string) (string, error)
+}
+
+type defaultK6Scripter struct{}
 
 func readStdoutPipeLines(pipe io.Reader) ([]byte, error) {
 	var outputBytes []byte
@@ -41,49 +46,49 @@ func findValueToPattern(input string, pattern string) string {
 	return val
 }
 
-func ExecK6Script(scriptSnippet string) (string, error) {
+func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, error) {
 	temp, tpErr := os.CreateTemp("", "script.js")
 	if tpErr != nil {
-		return "", errors.New(fmt.Sprintf("Error creating temp file: %s", tpErr.Error()))
+		return "", fmt.Errorf("error creating temp file: %s", tpErr.Error())
 	}
 
 	defer os.Remove(temp.Name())
 
 	if _, wrErr := temp.Write([]byte(scriptSnippet)); wrErr != nil {
-		return "", errors.New(fmt.Sprintf("Error writing to temp file: %s", wrErr.Error()))
+		return "", fmt.Errorf("error writing to temp file: %s", wrErr.Error())
 	}
 
 	if err := temp.Close(); err != nil {
-		return "", errors.New(fmt.Sprintf("Error closing temp file: %s", err.Error()))
+		return "", fmt.Errorf("error closing temp file: %s", err.Error())
 	}
 
 	cmd := exec.Command("k6", "run", temp.Name())
 
 	stdoutPipe, outErr := cmd.StdoutPipe()
 	if outErr != nil {
-		return "", errors.New(fmt.Sprintf("Error creating stdout pipe: %s", outErr.Error()))
+		return "", fmt.Errorf("error creating stdout pipe: %s", outErr.Error())
 	}
 	stderrPipe, stdErr := cmd.StderrPipe()
 	if stdErr != nil {
-		return "", errors.New(fmt.Sprintf("Error creating stderr pipe: %s", stdErr.Error()))
+		return "", fmt.Errorf("error creating stderr pipe: %s", stdErr.Error())
 	}
 
 	if err := cmd.Start(); err != nil {
-		return "", errors.New(fmt.Sprintf("Error starting k6 command: %s", err.Error()))
+		return "", fmt.Errorf("error starting k6 command: %s", err.Error())
 	}
 
 	outputBytes, err := readStdoutPipeLines(stdoutPipe)
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("Error reading stdout: %s", err.Error()))
+		return "", fmt.Errorf("error reading stdout: %s", err.Error())
 	}
 	errorOutputBytes, err := readStdoutPipeLines(stderrPipe)
 	if err != nil {
-		return "", errors.New(fmt.Sprintf("Error reading stderr: %s", err.Error()))
+		return "", fmt.Errorf("error reading stderr: %s", err.Error())
 	}
 
 	// Wait for the k6 command to finish.
 	if wErr := cmd.Wait(); wErr != nil {
-		return "", errors.New(fmt.Sprintf("k6 command finished with error: %s", err.Error()))
+		return "", fmt.Errorf("k6 command finished with error: %s", err.Error())
 	}
 
 	pattern1 := `###START->([^=]+)<-END###`
@@ -102,7 +107,7 @@ func ExecK6Script(scriptSnippet string) (string, error) {
 	return respValue, nil
 }
 
-func CreateScriptSnippet(req SyntheticsModelCustom) string {
+func CreateScriptSnippet(req SyntheticCheck) string {
 
 	k6Script := `
 
@@ -138,7 +143,7 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 		for (const assert of asserts) {
 			_assertions[assert.type] = {
 				"type":   assert.type,
-				"reason": assert.type.replace('_', ' ') + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
+				"reason": assert.type.replace('_', ' ') + ' ' + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
 				"actual": "N/A",
 				"status": 'FAIL',
 			}
@@ -215,7 +220,17 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 				{ headers: headers }
 			)
 
-			stepsResponse[stepKey] = response.json()
+			try {
+				const jsonResp = response.json()
+				if (jsonResp) {
+					stepsResponse[stepKey] = jsonResp
+				}
+			} catch (e) {
+				stepsResponse[stepKey] = {
+					"error": "An error occurred while parsing the response body",
+					"message": "The response should be a valid JSON object",
+				}
+			}
 			
 			for (const assert of asserts) {
 				if (assert.type === 'status_code') {
@@ -235,7 +250,7 @@ func CreateScriptSnippet(req SyntheticsModelCustom) string {
 						sOk = check(response, {
 							['status contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) > -1,
 						})
-					} else if (_op === "not_contains") {
+					} else if (_op === "not_contains" || _op === "does_not_contain") {
 						sOk = check(response, {
 							['status not contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) === -1,
 						})
