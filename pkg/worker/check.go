@@ -15,6 +15,10 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
+const (
+	errCheckNotAllowedToRun = "not allowed to run at this time"
+)
+
 type SyntheticCheck struct {
 	Uid string
 	//Not string
@@ -172,7 +176,7 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 	}, err
 }
 
-func (cs *CheckState) fire() {
+func (cs *CheckState) fire() error {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
@@ -187,37 +191,55 @@ func (cs *CheckState) fire() {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
 		if err != nil {
-			allow = false
-			return
+			return err
 		}
 		today := strings.ToLower(time.Now().In(loc).Weekday().String())
-
 		for _, day := range c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek {
 			if day == today {
 				allow = true
 			}
 		}
-		if allow {
-			currentDate := time.Now().In(loc)
-			timeFormat := "2006-01-02 15:04"
 
-			startTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(), c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime)
-			start, err := time.ParseInLocation(timeFormat, startTimeAppendDate, loc)
-			if err != nil || currentDate.UTC().Unix() < start.UTC().Unix() {
-				return
-			}
-			
-			endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(), c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
-			end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
-			if err != nil || currentDate.UTC().Unix() > end.UTC().Unix() {
-				return
-			}
+		if !allow {
+			return fmt.Errorf("check %d: %s, current day %s, allowed days %v", cs.check.Id,
+				errCheckNotAllowedToRun, today,
+				c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek)
 		}
+
+		currentDate := time.Now().In(loc)
+		timeFormat := "2006-01-02 15:04"
+
+		startTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
+			c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime)
+		start, err := time.ParseInLocation(timeFormat, startTimeAppendDate, loc)
+		if err != nil {
+			return err
+		}
+		currentUnixTime := currentDate.UTC().Unix()
+		startUnixTime := start.UTC().Unix()
+		if currentUnixTime < startUnixTime {
+			return fmt.Errorf("check %d: %s, current time %d < start time %d", cs.check.Id,
+				errCheckNotAllowedToRun, currentUnixTime, startUnixTime)
+		}
+
+		endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
+			c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
+		end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
+		if err != nil {
+			return err
+		}
+
+		endUnixTime := end.UTC().Unix()
+		if currentUnixTime > endUnixTime {
+			return fmt.Errorf("check %d: %s, current time %d > end time %d", cs.check.Id,
+				errCheckNotAllowedToRun, currentUnixTime, endUnixTime)
+		}
+
 	}
 
 	protocolChecker, err := getProtocolChecker(c)
 	if err != nil {
-		return
+		return err
 	}
 
 	testStatus := protocolChecker.check()
@@ -230,6 +252,8 @@ func (cs *CheckState) fire() {
 			protocolChecker.getTimers(),
 			protocolChecker.getAttrs())
 	}
+
+	return nil
 }
 
 type CheckState struct {
@@ -315,12 +339,14 @@ func (cs *CheckState) update() {
 	fireIn := time.Duration(interval-(diff%interval)) * time.Millisecond
 
 	intervalDuration := time.Duration(c.IntervalSeconds) * time.Second
-
-	slog.Info("next fire in", slog.String("interval", intervalDuration.String()),
+	slog.Info("code change next fire in", slog.String("interval", intervalDuration.String()),
 		slog.String("fireIn", fireIn.String()))
 
 	if c.CheckTestRequest.URL != "" {
-		cs.fire()
+		err := cs.fire()
+		if err != nil {
+			slog.Error("error firing", slog.String("error", err.Error()))
+		}
 		//RemoveCheck(c.check)
 		return
 	}
@@ -350,7 +376,10 @@ func (cs *CheckState) update() {
 			log.Printf("------------------")
 		}*/
 
-		cs.fire()
+		err := cs.fire()
+		if err != nil {
+			slog.Error("error firing", slog.String("error", err.Error()))
+		}
 
 		firingLock.Lock()
 		lock.Unlock()

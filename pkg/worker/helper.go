@@ -223,16 +223,18 @@ type WSPayloadOptions struct {
 	Authentication WSPayloadAuthentication `json:"authentication"`
 }
 
+type SpecifyTimeRange struct {
+	IsChecked  bool     `json:"is_checked"`
+	StartTime  string   `json:"start_time"`
+	EndTime    string   `json:"end_time"`
+	Timezone   string   `json:"timezone"`
+	DaysOfWeek []string `json:"days_of_week"`
+}
+
 type SpecifyFrequencyOptions struct {
 	Type             string `json:"type"`
 	IntervalType     string `json:"interval_type"`
-	SpecifyTimeRange struct {
-		IsChecked  bool     `json:"is_checked"`
-		StartTime  string   `json:"start_time"`
-		EndTime    string   `json:"end_time"`
-		Timezone   string   `json:"timezone"`
-		DaysOfWeek []string `json:"days_of_week"`
-	} `json:"specify_time_range"`
+	SpecifyTimeRange SpecifyTimeRange `json:"specify_time_range"`
 }
 
 type CaseOptions struct {
