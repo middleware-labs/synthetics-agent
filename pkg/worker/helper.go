@@ -85,6 +85,7 @@ type HTTPMultiStepsRequest struct {
 	HTTPVersion string               `json:"http_version"`
 	HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
 	HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
+	Assertions AssertionsOptions `json:"assertions"`;
 }
 
 type HTTPMultiStepsOptions struct {
