@@ -3,10 +3,10 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -16,23 +16,7 @@ type k6Scripter interface {
 
 type defaultK6Scripter struct{}
 
-func readStdoutPipeLines(pipe io.Reader) ([]byte, error) {
-	var outputBytes []byte
-	buf := make([]byte, 1024)
-	for {
-		n, err := pipe.Read(buf)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-		if n == 0 {
-			break
-		}
-		outputBytes = append(outputBytes, buf[:n]...)
-	}
-	return outputBytes, nil
-}
-
-func findValueToPattern(input string, pattern string) string {
+func findValueToPattern(input string, pattern string) (string, error) {
 	val := ""
 	re := regexp.MustCompile(pattern)
 	match := re.FindStringSubmatch(string(input))
@@ -41,9 +25,7 @@ func findValueToPattern(input string, pattern string) string {
 	}
 	re = regexp.MustCompile(`\\/"`)
 	val = re.ReplaceAllString(val, `"`)
-	re1 := regexp.MustCompile(`\\"`)
-	val = re1.ReplaceAllString(val, `"`)
-	return val
+	return strconv.Unquote("\"" + val + "\"")
 }
 
 func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, error) {
@@ -63,39 +45,13 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 	}
 
 	cmd := exec.Command("k6", "run", temp.Name())
-
-	stdoutPipe, outErr := cmd.StdoutPipe()
-	if outErr != nil {
-		return "", fmt.Errorf("error creating stdout pipe: %s", outErr.Error())
-	}
-	stderrPipe, stdErr := cmd.StderrPipe()
-	if stdErr != nil {
-		return "", fmt.Errorf("error creating stderr pipe: %s", stdErr.Error())
-	}
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("error starting k6 command: %s", err.Error())
-	}
-
-	outputBytes, err := readStdoutPipeLines(stdoutPipe)
+	outputBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("error reading stdout: %s", err.Error())
-	}
-	errorOutputBytes, err := readStdoutPipeLines(stderrPipe)
-	if err != nil {
-		return "", fmt.Errorf("error reading stderr: %s", err.Error())
-	}
-
-	// Wait for the k6 command to finish.
-	if wErr := cmd.Wait(); wErr != nil {
-		return "", fmt.Errorf("k6 command finished with error: %s", wErr.Error())
+		return "", fmt.Errorf("error executing k6 script: %s", err.Error())
 	}
 
 	pattern1 := `###START->([^=]+)<-END###`
-	respValue := findValueToPattern(string(errorOutputBytes), pattern1)
-	if respValue == "" {
-		respValue = findValueToPattern(string(outputBytes), pattern1)
-	}
+	return findValueToPattern(string(outputBytes), pattern1)
 
 	//pattern2 := `###OTHER_START->([^=]+)<-OTHER_START###`
 	//other := findValueToPattern(string(errorOutputBytes), pattern2)
@@ -103,8 +59,6 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 	//
 	//fmt.Println("other--->", other)
 	//fmt.Println("other2--->", other2)
-
-	return respValue, nil
 }
 
 func CreateScriptSnippet(req SyntheticCheck) string {
@@ -328,10 +282,10 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				"http_method":  step.Request.HTTPMethod,
 				"http_headers": step.Request.HTTPHeaders,
 				"http_payload": map[string]interface{}{
-					"type":         step.Request.HTTPPayload.RequestBody.Type,
-					"request_body": step.Request.HTTPPayload.RequestBody.Content,
+					"type":           step.Request.HTTPPayload.RequestBody.Type,
+					"request_body":   step.Request.HTTPPayload.RequestBody.Content,
 					"authentication": step.Request.HTTPPayload.Authentication,
-					"cookies":      step.Request.HTTPPayload.Cookies,
+					"cookies":        step.Request.HTTPPayload.Cookies,
 				},
 				"assertions": step.Request.Assertions.HTTP.Cases,
 			},
