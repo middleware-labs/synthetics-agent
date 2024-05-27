@@ -41,8 +41,12 @@ func findValueToPattern(input string, pattern string) string {
 	}
 	re = regexp.MustCompile(`\\/"`)
 	val = re.ReplaceAllString(val, `"`)
-	re1 := regexp.MustCompile(`\\"`)
-	val = re1.ReplaceAllString(val, `"`)
+
+	re1 := regexp.MustCompile(`\\\\"`)
+	val = re1.ReplaceAllString(val, `\"`)
+
+	re2 := regexp.MustCompile(`\\"`)
+	val = re2.ReplaceAllString(val, `"`)
 	return val
 }
 
@@ -64,10 +68,10 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 
 	cmd := exec.Command("k6", "run", temp.Name())
 
-	stdoutPipe, outErr := cmd.StdoutPipe()
+	/*stdoutPipe, outErr := cmd.StdoutPipe()
 	if outErr != nil {
 		return "", fmt.Errorf("error creating stdout pipe: %s", outErr.Error())
-	}
+	}*/
 	stderrPipe, stdErr := cmd.StderrPipe()
 	if stdErr != nil {
 		return "", fmt.Errorf("error creating stderr pipe: %s", stdErr.Error())
@@ -77,10 +81,10 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 		return "", fmt.Errorf("error starting k6 command: %s", err.Error())
 	}
 
-	outputBytes, err := readStdoutPipeLines(stdoutPipe)
+	/*outputBytes, err := readStdoutPipeLines(stdoutPipe)
 	if err != nil {
 		return "", fmt.Errorf("error reading stdout: %s", err.Error())
-	}
+	}*/
 	errorOutputBytes, err := readStdoutPipeLines(stderrPipe)
 	if err != nil {
 		return "", fmt.Errorf("error reading stderr: %s", err.Error())
@@ -93,9 +97,9 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 
 	pattern1 := `###START->([^=]+)<-END###`
 	respValue := findValueToPattern(string(errorOutputBytes), pattern1)
-	if respValue == "" {
+	/*if respValue == "" {
 		respValue = findValueToPattern(string(outputBytes), pattern1)
-	}
+	}*/
 
 	//pattern2 := `###OTHER_START->([^=]+)<-OTHER_START###`
 	//other := findValueToPattern(string(errorOutputBytes), pattern2)
@@ -328,10 +332,10 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				"http_method":  step.Request.HTTPMethod,
 				"http_headers": step.Request.HTTPHeaders,
 				"http_payload": map[string]interface{}{
-					"type":         step.Request.HTTPPayload.RequestBody.Type,
-					"request_body": step.Request.HTTPPayload.RequestBody.Content,
+					"type":           step.Request.HTTPPayload.RequestBody.Type,
+					"request_body":   step.Request.HTTPPayload.RequestBody.Content,
 					"authentication": step.Request.HTTPPayload.Authentication,
-					"cookies":      step.Request.HTTPPayload.Cookies,
+					"cookies":        step.Request.HTTPPayload.Cookies,
 				},
 				"assertions": step.Request.Assertions.HTTP.Cases,
 			},

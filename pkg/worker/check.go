@@ -361,7 +361,8 @@ func (cs *CheckState) update() {
 		firingLock.Unlock()
 
 		if !lock.TryLock() {
-			slog.Info("not allowed to run twice at same time")
+			slog.Info("not allowed to run twice at same time", slog.Int("id", c.Id),
+				slog.String("Uid", c.Uid))
 			return
 		}
 
