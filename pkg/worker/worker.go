@@ -173,6 +173,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 
 	consumer, err := w.pulsarClient.Consumer("persistent/public/default/"+topic,
 		"subscribe", ws.Params{
+			"allowOutOfOrderDelivery":    "1",
 			"subscriptionType":           "Key_Shared",
 			"ackTimeoutMillis":           "20000",
 			"consumerName":               consumerName,
