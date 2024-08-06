@@ -238,6 +238,8 @@ func (checker *tcpChecker) getAttrs() pcommon.Map {
 
 func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
 	var traceroute []map[string]interface{}
+	hopData := make(map[int]map[string]interface{})
+	maxHopNum := 0
 
 	checker.attrs.Range(func(k string, v pcommon.Value) bool {
 		if k == "hops.count" {
@@ -248,8 +250,6 @@ func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
 			hopsStr := v.AsString()
 			lines := strings.Split(hopsStr, "\n")
 			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
-
-			hopData := make(map[int]map[string]interface{})
 
 			for _, line := range lines {
 				matches := hopRegex.FindStringSubmatch(line)
@@ -269,7 +269,7 @@ func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
 							"avg":    latency,
 							"values": []float64{latency},
 						},
-						"router": []map[string]string{{"ip": ip}},
+						"routers": []map[string]string{{"ip": ip}},
 					}
 				} else {
 					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
@@ -288,15 +288,32 @@ func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
 					latencyData["values"] = values
 					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
 
-					routers := hopData[hopNum]["router"].([]map[string]string)
+					routers := hopData[hopNum]["routers"].([]map[string]string)
 					routers = append(routers, map[string]string{"ip": ip})
-					hopData[hopNum]["router"] = routers
+					hopData[hopNum]["routers"] = routers
+				}
+
+				if hopNum > maxHopNum {
+					maxHopNum = hopNum
 				}
 			}
 
-			// Converting the map to a slice
-			for _, data := range hopData {
-				traceroute = append(traceroute, data)
+			// Converting the map to a slice, filling gaps with default values
+			for i := 1; i <= maxHopNum; i++ {
+				if data, exists := hopData[i]; exists {
+					traceroute = append(traceroute, data)
+				} else {
+					// Adding default values for missing hop numbers
+					traceroute = append(traceroute, map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    nil,
+							"max":    nil,
+							"avg":    nil,
+							"values": nil,
+						},
+						"routers": []map[string]string{{"ip": "???"}},
+					})
+				}
 			}
 		}
 
