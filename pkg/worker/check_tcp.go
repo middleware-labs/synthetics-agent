@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -149,6 +151,8 @@ func (checker *tcpChecker) processTCPTTL(addr []net.IP, lcErr error) testStatus 
 			traceRouter := newTraceRouteChecker(addr[0],
 				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
 			tStatus := traceRouter.check()
+			traceRouter.getAttrs().CopyTo(checker.attrs)
+
 			testStatus.status = tStatus.status
 			testStatus.msg = fmt.Sprintf("error resolving dns %v", tStatus)
 		} else {
@@ -233,6 +237,73 @@ func (checker *tcpChecker) getAttrs() pcommon.Map {
 }
 
 func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
+	var traceroute []map[string]interface{}
+
+	checker.attrs.Range(func(k string, v pcommon.Value) bool {
+		if k == "hops.count" {
+			checker.testBody["hops_count"] = v.AsRaw()
+		}
+
+		if k == "hops" {
+			hopsStr := v.AsString()
+			lines := strings.Split(hopsStr, "\n")
+			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
+
+			hopData := make(map[int]map[string]interface{})
+
+			for _, line := range lines {
+				matches := hopRegex.FindStringSubmatch(line)
+				if matches == nil {
+					continue
+				}
+
+				hopNum, _ := strconv.Atoi(matches[1])
+				ip := matches[2]
+				latency, _ := strconv.ParseFloat(matches[3], 64)
+
+				if _, exists := hopData[hopNum]; !exists {
+					hopData[hopNum] = map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    latency,
+							"max":    latency,
+							"avg":    latency,
+							"values": []float64{latency},
+						},
+						"router": []map[string]string{{"ip": ip}},
+					}
+				} else {
+					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
+					values := latencyData["values"].([]float64)
+					values = append(values, latency)
+
+					minLatency := latencyData["min"].(float64)
+					maxLatency := latencyData["max"].(float64)
+
+					if latency < minLatency {
+						latencyData["min"] = latency
+					}
+					if latency > maxLatency {
+						latencyData["max"] = latency
+					}
+					latencyData["values"] = values
+					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
+
+					routers := hopData[hopNum]["router"].([]map[string]string)
+					routers = append(routers, map[string]string{"ip": ip})
+					hopData[hopNum]["router"] = routers
+				}
+			}
+
+			// Converting the map to a slice
+			for _, data := range hopData {
+				traceroute = append(traceroute, data)
+			}
+		}
+
+		return true
+	})
+
+	checker.testBody["traceroute"] = traceroute
 	return checker.testBody
 }
 
