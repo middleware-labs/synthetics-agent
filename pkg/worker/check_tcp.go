@@ -21,10 +21,102 @@ const (
 type tcpChecker struct {
 	c          SyntheticCheck
 	timers     map[string]float64
-	testBody   map[string]interface{}
 	assertions []map[string]string
-	attrs      pcommon.Map
 	netter     Netter
+	BaseCheckerForTTL
+}
+
+type BaseCheckerForTTL struct {
+	testBody map[string]interface{}
+	attrs    pcommon.Map
+}
+
+func (bc *BaseCheckerForTTL) getTestResponseBody() map[string]interface{} {
+	var traceroute []map[string]interface{}
+	hopData := make(map[int]map[string]interface{})
+	maxHopNum := 0
+
+	bc.attrs.Range(func(k string, v pcommon.Value) bool {
+		if k == "hops.count" {
+			bc.testBody["hops_count"] = v.AsRaw()
+		}
+
+		if k == "hops" {
+			hopsStr := v.AsString()
+			lines := strings.Split(hopsStr, "\n")
+			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
+
+			for _, line := range lines {
+				matches := hopRegex.FindStringSubmatch(line)
+				if matches == nil {
+					continue
+				}
+
+				hopNum, _ := strconv.Atoi(matches[1])
+				ip := matches[2]
+				latency, _ := strconv.ParseFloat(matches[3], 64)
+
+				if _, exists := hopData[hopNum]; !exists {
+					hopData[hopNum] = map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    latency,
+							"max":    latency,
+							"avg":    latency,
+							"values": []float64{latency},
+						},
+						"routers": []map[string]string{{"ip": ip}},
+					}
+				} else {
+					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
+					values := latencyData["values"].([]float64)
+					values = append(values, latency)
+
+					minLatency := latencyData["min"].(float64)
+					maxLatency := latencyData["max"].(float64)
+
+					if latency < minLatency {
+						latencyData["min"] = latency
+					}
+					if latency > maxLatency {
+						latencyData["max"] = latency
+					}
+					latencyData["values"] = values
+					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
+
+					routers := hopData[hopNum]["routers"].([]map[string]string)
+					routers = append(routers, map[string]string{"ip": ip})
+					hopData[hopNum]["routers"] = routers
+				}
+
+				if hopNum > maxHopNum {
+					maxHopNum = hopNum
+				}
+			}
+
+			// Converting the map to a slice, filling gaps with default values
+			for i := 1; i <= maxHopNum; i++ {
+				if data, exists := hopData[i]; exists {
+					traceroute = append(traceroute, data)
+				} else {
+					// Adding default values for missing hop numbers
+					traceroute = append(traceroute, map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    nil,
+							"max":    nil,
+							"avg":    nil,
+							"values": nil,
+						},
+						"routers": []map[string]string{{"ip": "???"}},
+					})
+				}
+			}
+		}
+
+		return true
+	})
+
+	bc.testBody["traceroute"] = traceroute
+	return bc.testBody
 }
 
 func newTCPChecker(c SyntheticCheck) protocolChecker {
@@ -35,14 +127,16 @@ func newTCPChecker(c SyntheticCheck) protocolChecker {
 			"dns":        0,
 			"connection": 0,
 		},
-		testBody: map[string]interface{}{
-			"assertions":        make([]map[string]interface{}, 0),
-			"tookMs":            "0 ms",
-			"connection_status": tcpStatusEstablished,
-		},
 		assertions: make([]map[string]string, 0),
-		attrs:      pcommon.NewMap(),
 		netter:     &DefaultNetter{},
+		BaseCheckerForTTL: BaseCheckerForTTL{
+			testBody: map[string]interface{}{
+				"assertions":        make([]map[string]interface{}, 0),
+				"tookMs":            "0 ms",
+				"connection_status": tcpStatusEstablished,
+			},
+			attrs: pcommon.NewMap(),
+		},
 	}
 }
 
@@ -213,94 +307,6 @@ func (checker *tcpChecker) getTimers() map[string]float64 {
 
 func (checker *tcpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
-}
-
-func (checker *tcpChecker) getTestResponseBody() map[string]interface{} {
-	var traceroute []map[string]interface{}
-	hopData := make(map[int]map[string]interface{})
-	maxHopNum := 0
-
-	checker.attrs.Range(func(k string, v pcommon.Value) bool {
-		if k == "hops.count" {
-			checker.testBody["hops_count"] = v.AsRaw()
-		}
-
-		if k == "hops" {
-			hopsStr := v.AsString()
-			lines := strings.Split(hopsStr, "\n")
-			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
-
-			for _, line := range lines {
-				matches := hopRegex.FindStringSubmatch(line)
-				if matches == nil {
-					continue
-				}
-
-				hopNum, _ := strconv.Atoi(matches[1])
-				ip := matches[2]
-				latency, _ := strconv.ParseFloat(matches[3], 64)
-
-				if _, exists := hopData[hopNum]; !exists {
-					hopData[hopNum] = map[string]interface{}{
-						"latency": map[string]interface{}{
-							"min":    latency,
-							"max":    latency,
-							"avg":    latency,
-							"values": []float64{latency},
-						},
-						"routers": []map[string]string{{"ip": ip}},
-					}
-				} else {
-					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
-					values := latencyData["values"].([]float64)
-					values = append(values, latency)
-
-					minLatency := latencyData["min"].(float64)
-					maxLatency := latencyData["max"].(float64)
-
-					if latency < minLatency {
-						latencyData["min"] = latency
-					}
-					if latency > maxLatency {
-						latencyData["max"] = latency
-					}
-					latencyData["values"] = values
-					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
-
-					routers := hopData[hopNum]["routers"].([]map[string]string)
-					routers = append(routers, map[string]string{"ip": ip})
-					hopData[hopNum]["routers"] = routers
-				}
-
-				if hopNum > maxHopNum {
-					maxHopNum = hopNum
-				}
-			}
-
-			// Converting the map to a slice, filling gaps with default values
-			for i := 1; i <= maxHopNum; i++ {
-				if data, exists := hopData[i]; exists {
-					traceroute = append(traceroute, data)
-				} else {
-					// Adding default values for missing hop numbers
-					traceroute = append(traceroute, map[string]interface{}{
-						"latency": map[string]interface{}{
-							"min":    nil,
-							"max":    nil,
-							"avg":    nil,
-							"values": nil,
-						},
-						"routers": []map[string]string{{"ip": "???"}},
-					})
-				}
-			}
-		}
-
-		return true
-	})
-
-	checker.testBody["traceroute"] = traceroute
-	return checker.testBody
 }
 
 func (checker *tcpChecker) getDetails() map[string]float64 {

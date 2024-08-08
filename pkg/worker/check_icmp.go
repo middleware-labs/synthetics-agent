@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -75,11 +73,10 @@ type icmpChecker struct {
 	c          SyntheticCheck
 	details    map[string]float64
 	timers     map[string]float64
-	testBody   map[string]interface{}
 	assertions []map[string]string
-	attrs      pcommon.Map
 	pinger     pinger
 	netter     Netter
+	BaseCheckerForTTL
 }
 
 func getDefaultPinger(c SyntheticCheck) (*icmpPinger, error) {
@@ -112,14 +109,16 @@ func newICMPChecker(c SyntheticCheck, pinger pinger) protocolChecker {
 		timers: map[string]float64{
 			"duration": 0,
 		},
-		testBody: map[string]interface{}{
-			"rcmp_status": "FAILED",
-			"packet_size": "0 bytes",
-			"packet":      "N/A",
-			"latency":     "N/A",
+		BaseCheckerForTTL: BaseCheckerForTTL{
+			testBody: map[string]interface{}{
+				"rcmp_status": "FAILED",
+				"packet_size": "0 bytes",
+				"packet":      "N/A",
+				"latency":     "N/A",
+			},
+			attrs: pcommon.NewMap(),
 		},
 		assertions: make([]map[string]string, 0),
-		attrs:      pcommon.NewMap(),
 		pinger:     pinger,
 		netter:     &DefaultNetter{},
 	}
@@ -356,92 +355,4 @@ func (checker *icmpChecker) getTimers() map[string]float64 {
 
 func (checker *icmpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
-}
-
-func (checker *icmpChecker) getTestResponseBody() map[string]interface{} {
-	var traceroute []map[string]interface{}
-	hopData := make(map[int]map[string]interface{})
-	maxHopNum := 0
-
-	checker.attrs.Range(func(k string, v pcommon.Value) bool {
-		if k == "hops.count" {
-			checker.testBody["hops_count"] = v.AsRaw()
-		}
-
-		if k == "hops" {
-			hopsStr := v.AsString()
-			lines := strings.Split(hopsStr, "\n")
-			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
-
-			for _, line := range lines {
-				matches := hopRegex.FindStringSubmatch(line)
-				if matches == nil {
-					continue
-				}
-
-				hopNum, _ := strconv.Atoi(matches[1])
-				ip := matches[2]
-				latency, _ := strconv.ParseFloat(matches[3], 64)
-
-				if _, exists := hopData[hopNum]; !exists {
-					hopData[hopNum] = map[string]interface{}{
-						"latency": map[string]interface{}{
-							"min":    latency,
-							"max":    latency,
-							"avg":    latency,
-							"values": []float64{latency},
-						},
-						"routers": []map[string]string{{"ip": ip}},
-					}
-				} else {
-					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
-					values := latencyData["values"].([]float64)
-					values = append(values, latency)
-
-					minLatency := latencyData["min"].(float64)
-					maxLatency := latencyData["max"].(float64)
-
-					if latency < minLatency {
-						latencyData["min"] = latency
-					}
-					if latency > maxLatency {
-						latencyData["max"] = latency
-					}
-					latencyData["values"] = values
-					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
-
-					routers := hopData[hopNum]["routers"].([]map[string]string)
-					routers = append(routers, map[string]string{"ip": ip})
-					hopData[hopNum]["routers"] = routers
-				}
-
-				if hopNum > maxHopNum {
-					maxHopNum = hopNum
-				}
-			}
-
-			// Converting the map to a slice, filling gaps with default values
-			for i := 1; i <= maxHopNum; i++ {
-				if data, exists := hopData[i]; exists {
-					traceroute = append(traceroute, data)
-				} else {
-					// Adding default values for missing hop numbers
-					traceroute = append(traceroute, map[string]interface{}{
-						"latency": map[string]interface{}{
-							"min":    nil,
-							"max":    nil,
-							"avg":    nil,
-							"values": nil,
-						},
-						"routers": []map[string]string{{"ip": "???"}},
-					})
-				}
-			}
-		}
-
-		return true
-	})
-
-	checker.testBody["traceroute"] = traceroute
-	return checker.testBody
 }
