@@ -3,6 +3,9 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"net"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +17,12 @@ const (
 	assertTypeICMPLatency    string = "latency"
 	assertTypeICMPPacketLoss string = "packet_loss"
 	assertTypeICMPPacketRecv string = "packet_received"
+)
+
+var (
+	icmpStatusEstablished = "established"
+	icmpStatusRefused     = "refused"
+	icmpStatusTimeout     = "timeout"
 )
 
 type pinger interface {
@@ -70,6 +79,7 @@ type icmpChecker struct {
 	assertions []map[string]string
 	attrs      pcommon.Map
 	pinger     pinger
+	netter     Netter
 }
 
 func getDefaultPinger(c SyntheticCheck) (*icmpPinger, error) {
@@ -111,6 +121,7 @@ func newICMPChecker(c SyntheticCheck, pinger pinger) protocolChecker {
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
 		pinger:     pinger,
+		netter:     &DefaultNetter{},
 	}
 }
 
@@ -174,6 +185,7 @@ func (checker *icmpChecker) check() testStatus {
 		status: testStatusOK,
 	}
 
+	icmpStatus := icmpStatusEstablished
 	err := checker.pinger.Run() // Blocks until finished.
 	if err != nil {
 		testStatus.status = testStatusError
@@ -182,6 +194,58 @@ func (checker *icmpChecker) check() testStatus {
 		checker.processICMPResponse(testStatus)
 		return testStatus
 	}
+
+	start := time.Now()
+	addr, lcErr := checker.netter.LookupIP(checker.c.Endpoint)
+	if lcErr != nil {
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error resolving dns: %v", lcErr)
+
+		for _, assert := range checker.c.Request.Assertions.TCP.Cases {
+			checker.assertions = append(checker.assertions,
+				map[string]string{
+					"type": assert.Type,
+					"reason": "should be " +
+						strings.ReplaceAll(assert.Config.Operator, "_", " ") +
+						" " + assert.Config.Value,
+					"status": "FAIL",
+					"actual": "DNS resolution failed",
+				})
+		}
+		checker.processICMPResponse(testStatus)
+		return testStatus
+	}
+
+	checker.timers["dns"] = timeInMs(time.Since(start))
+	cnTime := time.Now()
+
+	conn, tmErr := checker.netter.DialTimeout("icmp", addr[0].String()+
+		":"+checker.c.Request.Port,
+		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
+	if tmErr != nil {
+		checker.timers["connection"] = timeInMs(time.Since(cnTime))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error connecting icmp %v", tmErr)
+
+		checker.attrs.PutStr("connection.error", tmErr.Error())
+		icmpStatus = icmpStatusRefused
+		checker.testBody["connection_status"] = icmpStatusRefused
+		if strings.Contains(tmErr.Error(), icmpStatusTimeout) {
+			icmpStatus = tcpStatusTimeout
+			checker.testBody["connection_status"] = icmpStatusTimeout
+		}
+	} else {
+		defer checker.netter.ConnClose(conn)
+		checker.timers["connection"] = timeInMs(time.Since(cnTime))
+		checker.testBody["connection_status"] = icmpStatusEstablished
+	}
+
+	checker.attrs.PutStr("connection.status", icmpStatus)
+	checker.timers["duration"] = timeInMs(time.Since(start))
+
+	// process ttl
+	checker.processICMPTTL(addr, lcErr)
 
 	stats := checker.pinger.Statistics()
 
@@ -264,6 +328,28 @@ func (checker *icmpChecker) check() testStatus {
 	return testStatus
 }
 
+func (checker *icmpChecker) processICMPTTL(addr []net.IP, lcErr error) testStatus {
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
+	if checker.c.Request.TTL {
+		if len(addr) > 0 {
+			traceRouter := newTraceRouteChecker(addr[0],
+				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
+			tStatus := traceRouter.check()
+			traceRouter.getAttrs().CopyTo(checker.attrs)
+
+			testStatus.status = tStatus.status
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", tStatus)
+		} else {
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", lcErr)
+		}
+	}
+	return testStatus
+}
+
 func (checker *icmpChecker) getTimers() map[string]float64 {
 	return checker.timers
 }
@@ -273,5 +359,89 @@ func (checker *icmpChecker) getAttrs() pcommon.Map {
 }
 
 func (checker *icmpChecker) getTestResponseBody() map[string]interface{} {
+	var traceroute []map[string]interface{}
+	hopData := make(map[int]map[string]interface{})
+	maxHopNum := 0
+
+	checker.attrs.Range(func(k string, v pcommon.Value) bool {
+		if k == "hops.count" {
+			checker.testBody["hops_count"] = v.AsRaw()
+		}
+
+		if k == "hops" {
+			hopsStr := v.AsString()
+			lines := strings.Split(hopsStr, "\n")
+			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
+
+			for _, line := range lines {
+				matches := hopRegex.FindStringSubmatch(line)
+				if matches == nil {
+					continue
+				}
+
+				hopNum, _ := strconv.Atoi(matches[1])
+				ip := matches[2]
+				latency, _ := strconv.ParseFloat(matches[3], 64)
+
+				if _, exists := hopData[hopNum]; !exists {
+					hopData[hopNum] = map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    latency,
+							"max":    latency,
+							"avg":    latency,
+							"values": []float64{latency},
+						},
+						"routers": []map[string]string{{"ip": ip}},
+					}
+				} else {
+					latencyData := hopData[hopNum]["latency"].(map[string]interface{})
+					values := latencyData["values"].([]float64)
+					values = append(values, latency)
+
+					minLatency := latencyData["min"].(float64)
+					maxLatency := latencyData["max"].(float64)
+
+					if latency < minLatency {
+						latencyData["min"] = latency
+					}
+					if latency > maxLatency {
+						latencyData["max"] = latency
+					}
+					latencyData["values"] = values
+					latencyData["avg"] = (latencyData["min"].(float64) + latencyData["max"].(float64)) / 2
+
+					routers := hopData[hopNum]["routers"].([]map[string]string)
+					routers = append(routers, map[string]string{"ip": ip})
+					hopData[hopNum]["routers"] = routers
+				}
+
+				if hopNum > maxHopNum {
+					maxHopNum = hopNum
+				}
+			}
+
+			// Converting the map to a slice, filling gaps with default values
+			for i := 1; i <= maxHopNum; i++ {
+				if data, exists := hopData[i]; exists {
+					traceroute = append(traceroute, data)
+				} else {
+					// Adding default values for missing hop numbers
+					traceroute = append(traceroute, map[string]interface{}{
+						"latency": map[string]interface{}{
+							"min":    nil,
+							"max":    nil,
+							"avg":    nil,
+							"values": nil,
+						},
+						"routers": []map[string]string{{"ip": "???"}},
+					})
+				}
+			}
+		}
+
+		return true
+	})
+
+	checker.testBody["traceroute"] = traceroute
 	return checker.testBody
 }

@@ -18,34 +18,13 @@ const (
 	assertTypeTCPConnection   string = "connection"
 )
 
-type netter interface {
-	lookupIP(host string) ([]net.IP, error)
-	dialTimeout(network, address string,
-		timeout time.Duration) (net.Conn, error)
-	connClose(conn net.Conn) error
-}
-
-type defaultNetter struct{}
-
-func (d *defaultNetter) lookupIP(host string) ([]net.IP, error) {
-	return net.LookupIP(host)
-}
-
-func (d *defaultNetter) dialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
-	return net.DialTimeout(network, address, timeout)
-}
-
-func (d *defaultNetter) connClose(conn net.Conn) error {
-	return conn.Close()
-}
-
 type tcpChecker struct {
 	c          SyntheticCheck
 	timers     map[string]float64
 	testBody   map[string]interface{}
 	assertions []map[string]string
 	attrs      pcommon.Map
-	netter     netter
+	netter     Netter
 }
 
 func newTCPChecker(c SyntheticCheck) protocolChecker {
@@ -63,7 +42,7 @@ func newTCPChecker(c SyntheticCheck) protocolChecker {
 		},
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
-		netter:     &defaultNetter{},
+		netter:     &DefaultNetter{},
 	}
 }
 
@@ -171,7 +150,7 @@ func (checker *tcpChecker) check() testStatus {
 	tcpStatus := tcpStatusEstablished
 	start := time.Now()
 
-	addr, lcErr := checker.netter.lookupIP(checker.c.Endpoint)
+	addr, lcErr := checker.netter.LookupIP(checker.c.Endpoint)
 	if lcErr != nil {
 		checker.timers["duration"] = timeInMs(time.Since(start))
 		testStatus.status = testStatusError
@@ -195,7 +174,7 @@ func (checker *tcpChecker) check() testStatus {
 	checker.timers["dns"] = timeInMs(time.Since(start))
 	cnTime := time.Now()
 
-	conn, tmErr := checker.netter.dialTimeout("tcp", addr[0].String()+
+	conn, tmErr := checker.netter.DialTimeout("tcp", addr[0].String()+
 		":"+checker.c.Request.Port,
 		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
 	if tmErr != nil {
@@ -211,7 +190,7 @@ func (checker *tcpChecker) check() testStatus {
 			checker.testBody["connection_status"] = tcpStatusTimeout
 		}
 	} else {
-		defer checker.netter.connClose(conn)
+		defer checker.netter.ConnClose(conn)
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
 		checker.testBody["connection_status"] = tcpStatusEstablished
 	}

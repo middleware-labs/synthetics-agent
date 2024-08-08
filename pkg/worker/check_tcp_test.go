@@ -12,15 +12,15 @@ type mockNetter struct {
 	err error
 }
 
-func (n *mockNetter) lookupIP(host string) ([]net.IP, error) {
+func (n *mockNetter) LookupIP(host string) ([]net.IP, error) {
 	return n.ips, n.err
 }
 
-func (n *mockNetter) dialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+func (n *mockNetter) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
 	return nil, nil
 }
 
-func (n *mockNetter) connClose(conn net.Conn) error {
+func (n *mockNetter) ConnClose(conn net.Conn) error {
 	return nil
 }
 
@@ -29,7 +29,7 @@ func TestTCPCheck(t *testing.T) {
 	tests := []struct {
 		name       string
 		c          SyntheticCheck
-		netter     netter
+		netter     Netter
 		want       testStatus
 		wantErrMsg string
 	}{
