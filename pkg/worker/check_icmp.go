@@ -3,6 +3,7 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -14,6 +15,12 @@ const (
 	assertTypeICMPLatency    string = "latency"
 	assertTypeICMPPacketLoss string = "packet_loss"
 	assertTypeICMPPacketRecv string = "packet_received"
+)
+
+var (
+	icmpStatusEstablished = "established"
+	icmpStatusRefused     = "refused"
+	icmpStatusTimeout     = "timeout"
 )
 
 type pinger interface {
@@ -66,10 +73,10 @@ type icmpChecker struct {
 	c          SyntheticCheck
 	details    map[string]float64
 	timers     map[string]float64
-	testBody   map[string]interface{}
 	assertions []map[string]string
-	attrs      pcommon.Map
 	pinger     pinger
+	netter     Netter
+	BaseCheckerForTTL
 }
 
 func getDefaultPinger(c SyntheticCheck) (*icmpPinger, error) {
@@ -102,15 +109,18 @@ func newICMPChecker(c SyntheticCheck, pinger pinger) protocolChecker {
 		timers: map[string]float64{
 			"duration": 0,
 		},
-		testBody: map[string]interface{}{
-			"rcmp_status": "FAILED",
-			"packet_size": "0 bytes",
-			"packet":      "N/A",
-			"latency":     "N/A",
+		BaseCheckerForTTL: BaseCheckerForTTL{
+			testBody: map[string]interface{}{
+				"rcmp_status": "FAILED",
+				"packet_size": "0 bytes",
+				"packet":      "N/A",
+				"latency":     "N/A",
+			},
+			attrs: pcommon.NewMap(),
 		},
 		assertions: make([]map[string]string, 0),
-		attrs:      pcommon.NewMap(),
 		pinger:     pinger,
+		netter:     &DefaultNetter{},
 	}
 }
 
@@ -174,6 +184,7 @@ func (checker *icmpChecker) check() testStatus {
 		status: testStatusOK,
 	}
 
+	icmpStatus := icmpStatusEstablished
 	err := checker.pinger.Run() // Blocks until finished.
 	if err != nil {
 		testStatus.status = testStatusError
@@ -182,6 +193,58 @@ func (checker *icmpChecker) check() testStatus {
 		checker.processICMPResponse(testStatus)
 		return testStatus
 	}
+
+	start := time.Now()
+	addr, lcErr := checker.netter.LookupIP(checker.c.Endpoint)
+	if lcErr != nil {
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error resolving dns: %v", lcErr)
+
+		for _, assert := range checker.c.Request.Assertions.TCP.Cases {
+			checker.assertions = append(checker.assertions,
+				map[string]string{
+					"type": assert.Type,
+					"reason": "should be " +
+						strings.ReplaceAll(assert.Config.Operator, "_", " ") +
+						" " + assert.Config.Value,
+					"status": "FAIL",
+					"actual": "DNS resolution failed",
+				})
+		}
+		checker.processICMPResponse(testStatus)
+		return testStatus
+	}
+
+	checker.timers["dns"] = timeInMs(time.Since(start))
+	cnTime := time.Now()
+
+	conn, tmErr := checker.netter.DialTimeout("icmp", addr[0].String()+
+		":"+checker.c.Request.Port,
+		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
+	if tmErr != nil {
+		checker.timers["connection"] = timeInMs(time.Since(cnTime))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error connecting icmp %v", tmErr)
+
+		checker.attrs.PutStr("connection.error", tmErr.Error())
+		icmpStatus = icmpStatusRefused
+		checker.testBody["connection_status"] = icmpStatusRefused
+		if strings.Contains(tmErr.Error(), icmpStatusTimeout) {
+			icmpStatus = tcpStatusTimeout
+			checker.testBody["connection_status"] = icmpStatusTimeout
+		}
+	} else {
+		defer checker.netter.ConnClose(conn)
+		checker.timers["connection"] = timeInMs(time.Since(cnTime))
+		checker.testBody["connection_status"] = icmpStatusEstablished
+	}
+
+	checker.attrs.PutStr("connection.status", icmpStatus)
+	checker.timers["duration"] = timeInMs(time.Since(start))
+
+	// process ttl
+	checker.processICMPTTL(addr, lcErr)
 
 	stats := checker.pinger.Statistics()
 
@@ -264,14 +327,32 @@ func (checker *icmpChecker) check() testStatus {
 	return testStatus
 }
 
+func (checker *icmpChecker) processICMPTTL(addr []net.IP, lcErr error) testStatus {
+	testStatus := testStatus{
+		status: testStatusOK,
+	}
+
+	if checker.c.Request.TTL {
+		if len(addr) > 0 {
+			traceRouter := newTraceRouteChecker(addr[0],
+				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
+			tStatus := traceRouter.check()
+			traceRouter.getAttrs().CopyTo(checker.attrs)
+
+			testStatus.status = tStatus.status
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", tStatus)
+		} else {
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("error resolving dns %v", lcErr)
+		}
+	}
+	return testStatus
+}
+
 func (checker *icmpChecker) getTimers() map[string]float64 {
 	return checker.timers
 }
 
 func (checker *icmpChecker) getAttrs() pcommon.Map {
 	return checker.attrs
-}
-
-func (checker *icmpChecker) getTestResponseBody() map[string]interface{} {
-	return checker.testBody
 }
