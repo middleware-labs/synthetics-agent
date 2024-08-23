@@ -3,6 +3,7 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"regexp"
 	"strconv"
@@ -43,6 +44,7 @@ func (bc *BaseCheckerForTTL) getTestResponseBody() map[string]interface{} {
 
 		if k == "hops" {
 			hopsStr := v.AsString()
+			slog.Info("DATA => ", slog.Any("hopsstring", hopsStr))
 			lines := strings.Split(hopsStr, "\n")
 			hopRegex := regexp.MustCompile(`hop (\d+)\. ([\d.]+) ([\d.]+)ms`)
 
@@ -114,6 +116,8 @@ func (bc *BaseCheckerForTTL) getTestResponseBody() map[string]interface{} {
 
 		return true
 	})
+
+	slog.Info("DATA => ", slog.Any("final traceroute", fmt.Sprintf("%+v", traceroute)))
 
 	bc.testBody["traceroute"] = traceroute
 	return bc.testBody
@@ -224,7 +228,9 @@ func (checker *tcpChecker) processTCPTTL(addr []net.IP, lcErr error) testStatus 
 			traceRouter := newTraceRouteChecker(addr[0],
 				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
 			tStatus := traceRouter.check()
+			slog.Info("DATA => ", slog.Any("traceRouter.getAttrs().AsRaw()", traceRouter.getAttrs().AsRaw()))
 			traceRouter.getAttrs().CopyTo(checker.attrs)
+			slog.Info("DATA => ", slog.Any("checker.getAttrs().AsRaw()", checker.getAttrs().AsRaw()))
 
 			testStatus.status = tStatus.status
 			testStatus.msg = fmt.Sprintf("error resolving dns %v", tStatus)

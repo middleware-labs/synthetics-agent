@@ -79,10 +79,11 @@ func (checker *traceRouteChecker) check() testStatus {
 	start := time.Now()
 	err := checker.tracer.Trace(context.Background(), checker.ip, func(reply *traceroute.Reply) {
 		text := fmt.Sprintf("hop %d. %v %v", reply.Hops, reply.IP, reply.RTT)
-		slog.Debug("traceroute: ", slog.String("trace", text))
+		slog.Info("traceroute: ", slog.String("trace", text))
 		checker.hops = append(checker.hops, text)
 	})
 
+	slog.Info("DATA => ", slog.Any("checker.hops", checker.hops))
 	checker.attrs.PutInt("hops.count", int64(len(checker.hops)))
 	checker.attrs.PutStr("hops", strings.Join(checker.hops, "\n"))
 	checker.timers["duration"] = timeInMs(time.Since(start))
