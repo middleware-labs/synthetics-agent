@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/jhump/protoreflect/grpcreflect"
 	grpccheckerhelper "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"os"
-	"strings"
-	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"google.golang.org/grpc/metadata"
@@ -129,7 +130,7 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 	if err != nil {
 		t := testStatus{
 			status: testStatusError,
-			msg: err.Error(),
+			msg:    err.Error(),
 		}
 		checker.testBody["error"] = t.msg
 		checker.processGRPCError(t, checker.c)
@@ -138,7 +139,7 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
 		t := testStatus{
 			status: testStatusFail,
-			msg: fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String()),
+			msg:    fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String()),
 		}
 		checker.testBody["error"] = t.msg
 		checker.processGRPCError(t, checker.c)
@@ -150,9 +151,9 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 }
 func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 	var (
-		refClient *grpcreflect.Client
+		refClient   *grpcreflect.Client
 		reflections = make(map[string]interface{}, 0)
-		cnts = time.Now()
+		cnts        = time.Now()
 		addlHeaders = make([]string, 0)
 		reflHeaders = make([]string, 0)
 	)
@@ -177,7 +178,7 @@ func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.Cl
 	if err != nil {
 		t := testStatus{
 			status: testStatusError,
-			msg: err.Error(),
+			msg:    err.Error(),
 		}
 		checker.processGRPCError(t, checker.c)
 		return t
@@ -271,7 +272,6 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 	}
 	defer reset()
 
-
 	if symbol == "" {
 		_, err := descSource.FindSymbol(symbol)
 		if err != nil {
@@ -289,7 +289,7 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 
 	var messageReader *strings.Reader
 	if c.Request.GRPCPayload.Message != "" {
-		messageReader = strings.NewReader(fmt.Sprintf("%s", c.Request.GRPCPayload.Message))
+		messageReader = strings.NewReader(c.Request.GRPCPayload.Message)
 	}
 
 	options := grpccheckerhelper.FormatOptions{
@@ -314,9 +314,8 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 		Out:            os.Stdout,
 		Formatter:      formatter,
 		VerbosityLevel: 0,
-		ConnectStart: _d0,
+		ConnectStart:   _d0,
 	}
-
 
 	invoke := grpccheckerhelper.DynamicInvokeRPC(ctx, descSource, cc, symbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
 
@@ -333,7 +332,6 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 		t.msg = invoke.Error.Error()
 		t.status = testStatusError
 
-		checker.testBody["body"] = t.msg
 		checker.testBody["error"] = t.msg
 
 		checker.processGRPCError(t, checker.c)
@@ -406,6 +404,7 @@ func (checker *grpcChecker) getAttrs() pcommon.Map {
 func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
+	checker.testBody["request"] = checker.c.Request.GRPCPayload.Message
 	if checker.testBody["body"] == "" && checker.respStr != "" {
 		checker.testBody["body"] = checker.respStr
 	}

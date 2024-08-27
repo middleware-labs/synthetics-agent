@@ -3,6 +3,10 @@ package grpccheckerhelper
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
+	"time"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -12,9 +16,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"io"
-	"strings"
-	"time"
 )
 
 type RequestSupplier func(proto.Message) error
@@ -144,7 +145,10 @@ func DynamicInvokeRPC(ctx context.Context, source DescriptorSource, ch grpcdynam
 		return rsp
 	}
 
-	if stat.Code() == codes.OK {
+	if stat.Code() != codes.OK {
+		rsp.Status = checkStatusFail
+		rsp.Error = handleError(stat.Code(), stat.Message())
+	} else {
 		msg, fErr := handler.Formatter(resp)
 		rsp.ResolveTs = float64(time.Since(resolveStart)) / float64(time.Millisecond)
 		rsp.MessageRPC = msg
