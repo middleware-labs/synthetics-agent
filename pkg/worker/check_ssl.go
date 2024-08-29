@@ -1,6 +1,8 @@
 package worker
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -16,6 +18,7 @@ import (
 const (
 	assertTypeSSLResponseTime string = "response_time"
 	assertTypeSSLCertificate  string = "certificate"
+	timeFormat                       = "2006-01-02T15:04:05.000Z"
 )
 
 type sslChecker struct {
@@ -235,8 +238,13 @@ func (checker *sslChecker) check() testStatus {
 		}
 	}
 
+	sha1Fingerprint := sha1.Sum(cert.Raw)
+	sha256Fingerprint := sha256.Sum256(cert.Raw)
+
 	checker.attrs.PutBool("tls.is_ca", isCa)
-	checker.attrs.PutStr("check.details.fingerprint", fmt.Sprintf("%x", cert.Signature))
+	checker.attrs.PutStr("check.details.fingerprint_sha_1", formatFingerprint(sha1Fingerprint[:]))
+	checker.attrs.PutStr("check.details.fingerprint_sha_256", formatFingerprint(sha256Fingerprint[:]))
+	// checker.attrs.PutStr("check.details.serial_number", cert.SerialNumber.String())	// TODO: this result is different from datadog result so commenting as of now
 	checker.attrs.PutStr("check.details.not_valid_after", cert.NotAfter.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.not_valid_before", cert.NotBefore.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.cipher", tls.CipherSuiteName(conn.ConnectionState().CipherSuite))
@@ -247,7 +255,7 @@ func (checker *sslChecker) check() testStatus {
 
 	checker.testBody["issued_to"] = map[string]string{
 		"Alternative Name": strings.Join(cert.DNSNames, ", "),
-		"Common Name":      cert.Issuer.CommonName,
+		"Common Name":      cert.Subject.CommonName,
 	}
 	checker.testBody["issued_by"] = map[string]string{
 		"Common Name":  cert.Issuer.CommonName,
@@ -256,9 +264,11 @@ func (checker *sslChecker) check() testStatus {
 	}
 
 	checker.testBody["certificate"] = map[string]string{
-		"Fingerprint":      cert.SignatureAlgorithm.String(),
-		"Not Valid After":  cert.NotAfter.String(),
-		"Not Valid Before": cert.NotBefore.String(),
+		"Fingerprint SHA-1":   formatFingerprint(sha1Fingerprint[:]),
+		"Fingerprint SHA-256": formatFingerprint(sha256Fingerprint[:]),
+		"Not Valid After":     cert.NotAfter.Format(timeFormat),
+		"Not Valid Before":    cert.NotBefore.Format(timeFormat),
+		// "Serial Number":       cert.SerialNumber.String(),	// TODO: this result is different from datadog result so commenting as of now
 	}
 
 	checker.testBody["connection"] = map[string]string{
