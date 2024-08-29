@@ -194,7 +194,7 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 			if checker.c.Request.TTL && there && !assertInt(v.Int(), assert) {
 				ck["status"] = testStatusFail
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, network hopes count didn't matched"
+				testStatus.msg = "assert failed, network hops count didn't matched"
 			}
 
 		case assertTypeTCPConnection:
