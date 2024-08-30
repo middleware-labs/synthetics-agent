@@ -244,7 +244,7 @@ func (checker *sslChecker) check() testStatus {
 	checker.attrs.PutBool("tls.is_ca", isCa)
 	checker.attrs.PutStr("check.details.fingerprint_sha_1", formatFingerprint(sha1Fingerprint[:]))
 	checker.attrs.PutStr("check.details.fingerprint_sha_256", formatFingerprint(sha256Fingerprint[:]))
-	// checker.attrs.PutStr("check.details.serial_number", cert.SerialNumber.String())	// TODO: this result is different from datadog result so commenting as of now
+	checker.attrs.PutStr("check.details.serial_number", formatSerialNumber(cert.SerialNumber.Bytes()))
 	checker.attrs.PutStr("check.details.not_valid_after", cert.NotAfter.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.not_valid_before", cert.NotBefore.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.cipher", tls.CipherSuiteName(conn.ConnectionState().CipherSuite))
@@ -268,7 +268,7 @@ func (checker *sslChecker) check() testStatus {
 		"Fingerprint SHA-256": formatFingerprint(sha256Fingerprint[:]),
 		"Not Valid After":     cert.NotAfter.Format(timeFormat),
 		"Not Valid Before":    cert.NotBefore.Format(timeFormat),
-		// "Serial Number":       cert.SerialNumber.String(),	// TODO: this result is different from datadog result so commenting as of now
+		"Serial Number":       formatSerialNumber(cert.SerialNumber.Bytes()),
 	}
 
 	checker.testBody["connection"] = map[string]string{

@@ -294,3 +294,12 @@ func formatFingerprint(fingerprint []byte) string {
 	}
 	return formatted
 }
+
+func formatSerialNumber(serialNumber []byte) string {
+	formatted := ""
+	for _, v := range serialNumber {
+		// Convert the byte to a two-digit hexadecimal string and append to the result
+		formatted += fmt.Sprintf("%02X", v)
+	}
+	return formatted
+}
