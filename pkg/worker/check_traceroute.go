@@ -71,28 +71,45 @@ func (checker *traceRouteChecker) getTestResponseBody() map[string]interface{} {
 }
 
 func (checker *traceRouteChecker) check() testStatus {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(checker.timeout)*time.Second)
+	defer cancel()
 	defer checker.close()
+
 	testStatus := testStatus{
 		status: testStatusOK,
 		msg:    "",
 	}
+
 	start := time.Now()
-	err := checker.tracer.Trace(context.Background(), checker.ip, func(reply *traceroute.Reply) {
-		text := fmt.Sprintf("hop %d. %v %v", reply.Hops, reply.IP, reply.RTT)
-		slog.Debug("traceroute: ", slog.String("trace", text))
-		checker.hops = append(checker.hops, text)
-	})
+	done := make(chan struct{})
 
-	checker.attrs.PutInt("hops.count", int64(len(checker.hops)))
-	checker.attrs.PutStr("hops", strings.Join(checker.hops, "\n"))
-	checker.timers["duration"] = timeInMs(time.Since(start))
+	go func() {
+		err := checker.tracer.Trace(ctx, checker.ip, func(reply *traceroute.Reply) {
+			text := fmt.Sprintf("hop %d. %v %v", reply.Hops, reply.IP, reply.RTT)
+			slog.Info("traceroute: ", slog.String("trace", text))
+			checker.hops = append(checker.hops, text)
+		})
 
-	if err != nil {
-		slog.Error("traceroute error", slog.String("error", err.Error()))
-		checker.attrs.PutStr("hops.error", err.Error())
-		testStatus.status = testStatusError
-		testStatus.msg = fmt.Sprintf("traceroute error %v", err.Error())
-		return testStatus
+		if err != nil {
+			slog.Error("traceroute error", slog.String("error", err.Error()))
+			checker.attrs.PutStr("hops.error", err.Error())
+			testStatus.status = testStatusError
+			testStatus.msg = fmt.Sprintf("traceroute error %v", err.Error())
+		}
+
+		close(done)
+	}()
+
+	// Wait for either completion or timeout/cancellation
+	select {
+	case <-done:
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.attrs.PutInt("hops.count", int64(len(checker.hops)))
+		checker.attrs.PutStr("hops", strings.Join(checker.hops, "\n"))
+	case <-ctx.Done():
+		checker.timers["duration"] = timeInMs(time.Since(start))
+		checker.attrs.PutInt("hops.count", int64(len(checker.hops)))
+		checker.attrs.PutStr("hops", strings.Join(checker.hops, "\n"))
 	}
 
 	return testStatus
