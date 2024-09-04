@@ -3,6 +3,7 @@ package worker
 
 import (
 	"time"
+	"fmt"
 )
 
 type SyntheticsModel struct {
@@ -279,4 +280,26 @@ type MonitorOptions struct {
 
 func timeInMs(t time.Duration) float64 {
 	return float64(t) / float64(time.Millisecond)
+}
+
+func formatFingerprint(fingerprint []byte) string {
+	formatted := ""
+	for k, v := range fingerprint {
+		// Insert a colon every bytes (except before the first byte)
+		if k > 0 {
+			formatted += ":"
+		}
+		// Convert the byte to a two-digit hexadecimal string and append to the result
+		formatted += fmt.Sprintf("%02X", v)
+	}
+	return formatted
+}
+
+func formatSerialNumber(serialNumber []byte) string {
+	formatted := ""
+	for _, v := range serialNumber {
+		// Convert the byte to a two-digit hexadecimal string and append to the result
+		formatted += fmt.Sprintf("%02X", v)
+	}
+	return formatted
 }
