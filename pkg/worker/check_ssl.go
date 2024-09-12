@@ -19,6 +19,7 @@ const (
 	assertTypeSSLResponseTime string = "response_time"
 	assertTypeSSLCertificate  string = "certificate"
 	timeFormat                       = "2006-01-02T15:04:05.000Z"
+	defaultSslPort                   = "443"
 )
 
 type sslChecker struct {
@@ -30,6 +31,9 @@ type sslChecker struct {
 }
 
 func newSSLChecker(c SyntheticCheck) protocolChecker {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		c.Request.Port = defaultSslPort
+	}
 	return &sslChecker{
 		c: c,
 		timers: map[string]float64{

@@ -23,6 +23,7 @@ const (
 	grpcResponseTime grpcAssertion = "response_time"
 	grpcResponse     grpcAssertion = "grpc_response"
 	grpcMetadata     grpcAssertion = "grpc_metadata"
+	defaultGrpcPort                = "50051"
 )
 
 func (checker *grpcChecker) processGRPCError(testStatus testStatus, c SyntheticCheck) {
@@ -50,6 +51,9 @@ type grpcChecker struct {
 }
 
 func newGRPCChecker(c SyntheticCheck) protocolChecker {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		c.Request.Port = defaultGrpcPort
+	}
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",
