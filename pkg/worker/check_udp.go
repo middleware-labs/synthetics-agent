@@ -27,13 +27,9 @@ type udpChecker struct {
 const (
 	udpStatusSuccessful = "successful"
 	udpStatusFailed     = "failed"
-	defaultUdpPort      = "53"
 )
 
 func newUDPChecker(c SyntheticCheck) protocolChecker {
-	if strings.TrimSpace(c.Request.Port) == "" {
-		c.Request.Port = defaultUdpPort
-	}
 	return &udpChecker{
 		c: c,
 		timers: map[string]float64{

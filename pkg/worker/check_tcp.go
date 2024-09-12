@@ -16,7 +16,6 @@ const (
 	assertTypeTCPResponseTime string = "response_time"
 	assertTypeTCPNetworkHops  string = "network_hops"
 	assertTypeTCPConnection   string = "connection"
-	defaultTcpPort                   = "80"
 )
 
 type tcpChecker struct {
@@ -121,9 +120,6 @@ func (bc *BaseCheckerForTTL) getTestResponseBody() map[string]interface{} {
 }
 
 func newTCPChecker(c SyntheticCheck) protocolChecker {
-	if strings.TrimSpace(c.Request.Port) == "" {
-		c.Request.Port = defaultTcpPort
-	}
 	return &tcpChecker{
 		c: c,
 		timers: map[string]float64{

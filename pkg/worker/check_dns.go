@@ -31,6 +31,7 @@ const (
 	dnsRecordTypeNS    = "NS"
 	dnsRecordTypeMX    = "MX"
 	dnsRecordTypeCNAME = "CNAME"
+	defaultDnsPort     = "53"
 )
 
 var recordTypeToLookupFn = map[string]func(context.Context,
@@ -170,6 +171,9 @@ type dnsChecker struct {
 }
 
 func newDNSChecker(c SyntheticCheck) protocolChecker {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		c.Request.Port = defaultDnsPort
+	}
 	return &dnsChecker{
 		c:      c,
 		lookup: make([]map[string]string, 0),
