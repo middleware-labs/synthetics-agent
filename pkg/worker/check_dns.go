@@ -31,6 +31,9 @@ const (
 	dnsRecordTypeNS    = "NS"
 	dnsRecordTypeMX    = "MX"
 	dnsRecordTypeCNAME = "CNAME"
+
+	defaultDnsServer = "8.8.8.8"
+	defaultDnsPort   = "53"
 )
 
 var recordTypeToLookupFn = map[string]func(context.Context,
@@ -178,6 +181,12 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 				d := net.Dialer{
 					Timeout: time.Second,
+				}
+				if strings.TrimSpace(c.Request.DNSServer) == "" {
+					c.Request.DNSServer = defaultDnsServer
+				}
+				if strings.TrimSpace(c.Request.Port) == "" {
+					c.Request.Port = defaultDnsPort
 				}
 				return d.DialContext(ctx, network, c.Request.DNSServer+":"+c.Request.Port)
 			},
