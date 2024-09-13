@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -119,7 +120,10 @@ func (bc *BaseCheckerForTTL) getTestResponseBody() map[string]interface{} {
 	return bc.testBody
 }
 
-func newTCPChecker(c SyntheticCheck) protocolChecker {
+func newTCPChecker(c SyntheticCheck) (protocolChecker, error) {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		return nil, errors.New("port is required for TCP checks")
+	}
 	return &tcpChecker{
 		c: c,
 		timers: map[string]float64{
@@ -137,7 +141,7 @@ func newTCPChecker(c SyntheticCheck) protocolChecker {
 			},
 			attrs: pcommon.NewMap(),
 		},
-	}
+	}, nil
 }
 
 var (
