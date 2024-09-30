@@ -202,13 +202,14 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 }
 
 func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
+	fmt.Printf("in fillAssertions")
+	fmt.Printf("\n\nchecker.c.Request.Assertions.DNS.Cases: %+v\n\n", checker.c.Request.Assertions.DNS.Cases)
 	c := checker.c
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
 
 	ctx := context.Background()
-	fmt.Printf("\n\nc.Request.Assertions.DNS.Cases: %+v\n\n", c.Request.Assertions.DNS.Cases)
 	for _, assert := range c.Request.Assertions.DNS.Cases {
 
 		// if testStatus.status == testStatusFail {
