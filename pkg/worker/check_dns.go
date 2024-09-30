@@ -359,7 +359,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 	return testStatus
 }
 func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
-
+	fmt.Printf("in processDNSResponse")
 	c := checker.c
 	ctx := context.Background()
 
@@ -454,6 +454,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 }
 
 func (checker *dnsChecker) check() testStatus {
+	fmt.Printf("in check")
 	c := checker.c
 	start := time.Now()
 	testStatus := testStatus{
@@ -496,6 +497,7 @@ func (checker *dnsChecker) getTestResponseBody() map[string]interface{} {
 }
 
 func (checker *dnsChecker) getDNSExpiry() (int, error) {
+	fmt.Printf("in getDNSExpiry")
 	rawWhoisData, err := whois.Whois(checker.c.Endpoint)
 	if err != nil {
 		return 0, err
