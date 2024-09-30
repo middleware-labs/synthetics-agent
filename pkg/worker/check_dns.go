@@ -208,6 +208,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 	}
 
 	ctx := context.Background()
+	fmt.Printf("\n\nc.Request.Assertions.DNS.Cases: %+v\n\n", c.Request.Assertions.DNS.Cases)
 	for _, assert := range c.Request.Assertions.DNS.Cases {
 
 		// if testStatus.status == testStatusFail {
@@ -353,6 +354,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 		}
 		checker.assertions = append(checker.assertions, ck)
 	}
+	fmt.Printf("\n\n=>checker.assertions: %+v\n\n", checker.assertions)
 	return testStatus
 }
 func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
