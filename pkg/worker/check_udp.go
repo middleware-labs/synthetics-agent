@@ -2,6 +2,7 @@ package worker
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -29,7 +30,10 @@ const (
 	udpStatusFailed     = "failed"
 )
 
-func newUDPChecker(c SyntheticCheck) protocolChecker {
+func newUDPChecker(c SyntheticCheck) (protocolChecker, error) {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		return nil, errors.New("port is required for UDP checks")
+	}
 	return &udpChecker{
 		c: c,
 		timers: map[string]float64{
@@ -45,7 +49,7 @@ func newUDPChecker(c SyntheticCheck) protocolChecker {
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
 		netHelper:  &defaultUDPNetHelper{},
-	}
+	}, nil
 }
 
 func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received []byte) {

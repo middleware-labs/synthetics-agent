@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -49,7 +50,10 @@ type grpcChecker struct {
 	attrs        pcommon.Map
 }
 
-func newGRPCChecker(c SyntheticCheck) protocolChecker {
+func newGRPCChecker(c SyntheticCheck) (protocolChecker, error) {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		return nil, errors.New("port is required for GRPC checks")
+	}
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",
@@ -57,7 +61,7 @@ func newGRPCChecker(c SyntheticCheck) protocolChecker {
 		testBody:   make(map[string]interface{}),
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
-	}
+	}, nil
 }
 
 func (checker *grpcChecker) fillGRPCAssertions() testStatus {

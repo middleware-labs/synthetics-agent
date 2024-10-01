@@ -50,7 +50,7 @@ func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 		httpChecker, err := newHTTPChecker(c)
 		return httpChecker, err
 	case "tcp":
-		return newTCPChecker(c), nil
+		return newTCPChecker(c)
 	case "dns":
 		return newDNSChecker(c), nil
 	case "ping":
@@ -64,11 +64,11 @@ func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 	case "ssl":
 		return newSSLChecker(c), nil
 	case "udp":
-		return newUDPChecker(c), nil
+		return newUDPChecker(c)
 	case "web_socket":
 		return newWSChecker(c), nil
 	case "grpc":
-		return newGRPCChecker(c), nil
+		return newGRPCChecker(c)
 	}
 
 	return nil, nil
