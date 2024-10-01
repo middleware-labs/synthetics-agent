@@ -31,9 +31,8 @@ const (
 	dnsRecordTypeNS    = "NS"
 	dnsRecordTypeMX    = "MX"
 	dnsRecordTypeCNAME = "CNAME"
-
-	defaultDnsServer = "8.8.8.8"
-	defaultDnsPort   = "53"
+	defaultDnsServer   = "8.8.8.8"
+	defaultDnsPort     = "53"
 )
 
 var recordTypeToLookupFn = map[string]func(context.Context,
