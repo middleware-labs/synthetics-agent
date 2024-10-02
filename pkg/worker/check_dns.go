@@ -242,6 +242,8 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				ck["reason"] = "response time assertion failed"
 			}
 
+			// testStatus.status = testStatusOK
+
 		case assertTypeDNSEveryAvailableRecord:
 			fallthrough
 		case assertTypeDNSAtLeastOneRecord:
@@ -352,14 +354,16 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				return testStatus
 			} else {
 				ck["actual"] = strconv.Itoa(expiry)
-				ck["reason"] = "response time assertion passed"
+				ck["reason"] = "domain registry expiration assertion passed"
 				if !assertFloat(checker.timers["duration"], assert) {
 					ck["status"] = testStatusFail
-					ck["reason"] = "domain registration expiry assertion failed"
+					ck["reason"] = "should be " + assert.Config.Operator +
+						" " + assert.Config.Value
 				}
 			}
 
 		}
+		fmt.Printf("\n\n=> asert.Type: %v , ck: %v", assert.Type, ck)
 		checker.assertions = append(checker.assertions, ck)
 	}
 	fmt.Printf("\n\n=>checker.assertions: %+v\n\n", checker.assertions)
