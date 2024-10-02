@@ -209,8 +209,6 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 }
 
 func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
-	fmt.Printf("in fillAssertions")
-	fmt.Printf("\n\nchecker.c.Request.Assertions.DNS.Cases: %+v\n\n", checker.c.Request.Assertions.DNS.Cases)
 	c := checker.c
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -218,18 +216,6 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 
 	ctx := context.Background()
 	for _, assert := range c.Request.Assertions.DNS.Cases {
-
-		// if testStatus.status == testStatusFail {
-		// 	fmt.Printf("its fail")
-		// 	checker.assertions = append(checker.assertions, map[string]string{
-		// 		"type":   assert.Type,
-		// 		"reason": testStatus.msg,
-		// 		"actual": "N/A",
-		// 		"status": testStatusFail,
-		// 	})
-		// 	continue
-		// }
-
 		ck := make(map[string]string)
 		switch assert.Type {
 		case assertTypeDNSResponseTime:
@@ -242,8 +228,6 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				ck["reason"] = "response time assertion failed"
 			}
 
-			// testStatus.status = testStatusOK
-
 		case assertTypeDNSEveryAvailableRecord:
 			fallthrough
 		case assertTypeDNSAtLeastOneRecord:
@@ -252,6 +236,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
 				" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
 			ck["status"] = testStatusOK
+			ck["reason"] = assert.Type + " " + assert.Config.Target + " assertion passed"
 
 			switch assert.Config.Target {
 			case "of_type_a":
@@ -363,14 +348,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			}
 
 		}
-		fmt.Printf("\n\n=> asert.Type: %v , ck: %v", assert.Type, ck)
 		checker.assertions = append(checker.assertions, ck)
 	}
-	fmt.Printf("\n\n=>checker.assertions: %+v\n\n", checker.assertions)
 	return testStatus
 }
 func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
-	fmt.Printf("in processDNSResponse")
 	c := checker.c
 	ctx := context.Background()
 
@@ -465,7 +447,6 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 }
 
 func (checker *dnsChecker) check() testStatus {
-	fmt.Printf("in check")
 	c := checker.c
 	start := time.Now()
 	testStatus := testStatus{
@@ -508,7 +489,6 @@ func (checker *dnsChecker) getTestResponseBody() map[string]interface{} {
 }
 
 func (checker *dnsChecker) getDNSExpiry() (int, error) {
-	fmt.Printf("in getDNSExpiry")
 	rawWhoisData, err := whois.Whois(checker.c.Endpoint)
 	if err != nil {
 		return 0, err
