@@ -225,7 +225,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["reason"] = "response time assertion passed"
 			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
-				ck["reason"] = assert.Type + " should be " + assert.Config.Operator + " " + assert.Config.Value
+				ck["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 			}
 
 		case assertTypeDNSEveryAvailableRecord:
@@ -236,7 +236,6 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
 				" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
 			ck["status"] = testStatusOK
-			// ck["reason"] = assert.Type + " " + assert.Config.Target + " assertion passed"
 
 			switch assert.Config.Target {
 			case "of_type_a":
@@ -334,13 +333,16 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["status"] = testStatusOK
 			expiry, err := checker.getDNSExpiry()
 			if err != nil {
+				ck["status"] = testStatusError
+				ck["reason"] = "Error while getting domain expiration"
+				ck["actual"] = err.Error()
 				testStatus.status = testStatusError
 				testStatus.msg = err.Error()
 				return testStatus
 			} else {
 				ck["actual"] = strconv.Itoa(expiry)
 				ck["reason"] = "domain registry expiration assertion passed"
-				if !assertFloat(checker.timers["duration"], assert) {
+				if !assertFloat(float64(expiry), assert) {
 					ck["status"] = testStatusFail
 					ck["reason"] = "should be " + assert.Config.Operator +
 						" " + assert.Config.Value
