@@ -333,9 +333,10 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["status"] = testStatusOK
 			expiry, err := checker.getDNSExpiry()
 			if err != nil {
+				fmt.Printf("\nerror while getting DNS expiry for domain '%s': %s\n", checker.c.Endpoint, err.Error())
 				ck["status"] = testStatusError
 				ck["reason"] = "Error while getting domain expiration"
-				ck["actual"] = err.Error()
+				ck["actual"] = "N/A"
 				testStatus.status = testStatusError
 				testStatus.msg = err.Error()
 				return testStatus
