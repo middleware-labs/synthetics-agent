@@ -342,7 +342,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				return testStatus
 			} else {
 				ck["actual"] = strconv.Itoa(expiry)
-				ck["reason"] = "domain registry expiration assertion passed"
+				ck["reason"] = "domain registration expiry assertion passed"
 				if !assertFloat(float64(expiry), assert) {
 					ck["status"] = testStatusFail
 					ck["reason"] = "should be " + assert.Config.Operator +
