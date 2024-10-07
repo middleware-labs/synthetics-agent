@@ -297,7 +297,7 @@ func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
 	}
 }
 
-func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	assertions["reason"] = "should be " + assert.Config.Operator +
 		" " + assert.Config.Value
@@ -307,7 +307,7 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]
 
 	if !assertString(body, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, body didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, body))
 
 		assertions["status"] = testStatusFail
 		assertions["actual"] = "Not Matched"
@@ -316,10 +316,10 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]
 		assertions["actual"] = "Matched"
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
-func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -346,16 +346,16 @@ func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[str
 	assertions["actual"] = hash
 	if !assertString(hash, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "body hash didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, hash))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
-func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -365,18 +365,16 @@ func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[str
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertString(header, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, header (" +
-			assert.Config.Target + ")  didn't matched"
-
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, header))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
-	assert CaseOptions) (map[string]string, testStatus) {
+	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -386,16 +384,16 @@ func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertFloat(responseTime, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, response_time didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, responseTime))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseStatusCodeAssertions(statusCode int,
-	assert CaseOptions) (map[string]string, testStatus) {
+	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 
 	testStatus := testStatus{
@@ -407,14 +405,13 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 		" " + assert.Config.Value
 	if !assertInt(int64(statusCode), assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, status_code didn't matched (" +
-			assert.Config.Value + ") but got " + http.StatusText(statusCode)
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, statusCode))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
@@ -489,32 +486,33 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
 
 	var checkHttp200 = true
+	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
 		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
 		case assertTypeHTTPBody:
-			testAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyAssertions(bss, assert, testStatusMsg)
 
 		case assertTypeHTTPBodyHash:
-			testAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyHashAssertions(bss, assert, testStatusMsg)
 
 		case assertTypeHTTPHeader:
 			assertHeader := resp.Header.Get(assert.Config.Target)
-			testAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseHeaderAssertions(assertHeader, assert, testStatusMsg)
 
 		case assertTypeHTTPResponseTime:
 			responseTime := checker.timers["duration"]
-			testAssertions, assertStatus = getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseResponseTimeAssertions(responseTime, assert, testStatusMsg)
 
 		case assertTypeHTTPStatusCode:
 			checkHttp200 = false
-			testAssertions, assertStatus = getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert, testStatusMsg)
 		}
 
 		if assertStatus.status != testStatusOK {
 			tStatus.status = testStatusFail
-			tStatus.msg = "one or more test cases failed"
+			tStatus.msg = strings.Join(testStatusMsg, "; ")
 		}
 
 		assertChecker := map[string]string{
@@ -532,8 +530,8 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&
 		resp.StatusCode < http.StatusMultipleChoices /*300*/) {
 		tStatus.status = testStatusFail
-		tStatus.msg = "response code is not 2XX, received response code: " +
-			strconv.Itoa(resp.StatusCode)
+		testStatusMsg = append(testStatusMsg, "response code is not 2XX, received response code: "+strconv.Itoa(resp.StatusCode))
+		tStatus.msg = strings.Join(testStatusMsg, ", ")
 	}
 
 	checker.processHTTPResponse()

@@ -61,7 +61,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 
 	isTestReq := c.CheckTestRequest.URL != ""
 	if !isTestReq {
-
+		testStatusMsg := make([]string, 0)
 		for _, assert := range c.Request.Assertions.UDP.Cases {
 			// do not process assertions if status of any (previous)
 			// assertion is not OK
@@ -82,8 +82,9 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 
 				if !assertFloat(dur, assert) {
 					ck["status"] = testStatusFail
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, dur))
 					testStatus.status = testStatusFail
-					testStatus.msg = "assert failed, response_time didn't matched"
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 
 			case assertTypeUDPRecvMessage:
@@ -94,8 +95,9 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 				if !assertString(string(received), assert) {
 					ck["status"] = testStatusFail
 					ck["actual"] = "Not Matched"
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, string(received)))
 					testStatus.status = testStatusFail
-					testStatus.msg = "assert failed, response message didn't matched"
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 			}
 

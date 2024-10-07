@@ -132,7 +132,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
-
+	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.WebSocket.Cases {
 		ck := make(map[string]string)
 
@@ -142,10 +142,11 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + fmt.Sprintf("%v", assert.Config.Value)
 			if !assertFloat(checker.timers["duration"], assert) {
+				ck["status"] = testStatusFail
+				ck["reason"] = fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"])
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
-				testStatus.msg = "response time not matched with the condition"
-				ck["status"] = testStatus.status
-				ck["reason"] = testStatus.msg
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				ck["status"] = testStatusPass
 				ck["reason"] = "response time matched with the condition"
@@ -154,11 +155,11 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 			ck["actual"] = recMsg
 			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
 			if !assertString(recMsg, assert) {
+				ck["status"] = testStatusFail
+				ck["reason"] = fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, recMsg)
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, recMsg))
 				testStatus.status = testStatusFail
-				testStatus.msg = "received message not matched with the condition"
-
-				ck["status"] = testStatus.status
-				ck["reason"] = testStatus.msg
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				ck["status"] = testStatusPass
 			}
@@ -168,19 +169,21 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 				ck["actual"] = vl
 				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
 				if !assertString(vl, assert) {
+					ck["status"] = testStatusFail
+					ck["reason"] = fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, vl)
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, vl))
 					testStatus.status = testStatusFail
-					testStatus.msg = "response header didn't matched with the condition"
-					ck["status"] = testStatus.status
-					ck["reason"] = testStatus.msg
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
 					ck["status"] = testStatusPass
 				}
 			} else {
 				testStatus.status = testStatusFail
-				testStatus.msg = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
-				ck["status"] = testStatus.status
+				ck["status"] = testStatusFail
 				ck["actual"] = "No Header"
-				ck["reason"] = testStatus.msg
+				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got no header)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value))
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 		}
 

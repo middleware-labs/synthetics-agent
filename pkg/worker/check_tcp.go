@@ -174,6 +174,7 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 }
 
 func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus string) testStatus {
+	testStatusMsg := make([]string, 0)
 	for _, assert := range checker.c.Request.Assertions.TCP.Cases {
 		ck := make(map[string]string)
 		ck["type"] = assert.Type
@@ -187,8 +188,9 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 			ck["reason"] += ck["reason"] + "ms"
 			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, response_time didn't matched"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 		case "network_hops":
@@ -197,8 +199,9 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 
 			if checker.c.Request.TTL && there && !assertInt(v.Int(), assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, v.Int()))
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, network hops count didn't matched"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 		case assertTypeTCPConnection:
@@ -208,8 +211,9 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 
 			if !assertString(tcpStatus, assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, tcpStatus))
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, connection status didn't matched"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 		}
 
