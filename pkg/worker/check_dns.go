@@ -260,7 +260,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while looking up CNAME record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
-					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, Error while looking up CNAME record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up CNAME record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
@@ -272,7 +272,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while resolving MX record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
-					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, Error while resolving MX record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while resolving MX record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
@@ -284,7 +284,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while looking up NS record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
-					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, Error while looking up NS record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up NS record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
@@ -296,7 +296,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["status"] = testStatusFail
 					ck["reason"] = "Error while looking up TXT record"
 					ck["actual"] = fmt.Sprintf("%v", err)
-					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, Error while looking up TXT record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up TXT record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
