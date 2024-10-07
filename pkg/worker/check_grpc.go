@@ -69,6 +69,7 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	testStatusMsg := make([]string, 0)
 
 	for _, assert := range c.Request.Assertions.GRPC.Cases {
 		ck := map[string]string{
@@ -83,8 +84,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
-				testStatus.msg = "duration did not match with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 			checker.assertions = append(checker.assertions, ck)
 
@@ -92,8 +94,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = checker.respStr
 			if !assertString(checker.respStr, assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.respStr))
 				testStatus.status = testStatusFail
-				testStatus.msg = "response message didn't matched with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 			checker.assertions = append(checker.assertions, ck)
@@ -103,8 +106,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = actual
 			if !assertString(actual, assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, actual))
 				testStatus.status = testStatusFail
-				testStatus.msg = "metadata message did not match with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 			checker.assertions = append(checker.assertions, ck)
 		}

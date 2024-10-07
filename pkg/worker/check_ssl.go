@@ -132,7 +132,7 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
-
+	testStatusMsg := make([]string, 0)
 	c := checker.c
 	for _, assert := range c.Request.Assertions.Ssl.Cases {
 
@@ -152,9 +152,9 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 
 			if !assertInt(expiryDays, assert) {
 				assertChecker["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, expiryDays))
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, expiry didn't matched, certificate expire in " +
-					strconv.FormatInt(expiryDays, 10) + " days"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				assertChecker["status"] = testStatusPass
 			}
@@ -165,10 +165,10 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 				" " + assert.Config.Value + " ms"
 			assertChecker["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
 			if !assertFloat(checker.timers["duration"], assert) {
-				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, response_time didn't matched"
-
 				assertChecker["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
+				testStatus.status = testStatusFail
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				assertChecker["status"] = testStatusPass
 			}

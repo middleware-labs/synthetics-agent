@@ -307,7 +307,7 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMs
 
 	if !assertString(body, assert) {
 		testStatus.status = testStatusFail
-		testStatusMsg = append(testStatusMsg, assert.Type+" assertion failed;")
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, body))
 
 		assertions["status"] = testStatusFail
 		assertions["actual"] = "Not Matched"
@@ -346,7 +346,7 @@ func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions, testStat
 	assertions["actual"] = hash
 	if !assertString(hash, assert) {
 		testStatus.status = testStatusFail
-		testStatusMsg = append(testStatusMsg, assert.Type+" assertion failed;")
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, hash))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
@@ -365,7 +365,7 @@ func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions, testStat
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertString(header, assert) {
 		testStatus.status = testStatusFail
-		testStatusMsg = append(testStatusMsg, assert.Type+" assertion failed;")
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, header))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
@@ -384,7 +384,7 @@ func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertFloat(responseTime, assert) {
 		testStatus.status = testStatusFail
-		testStatusMsg = append(testStatusMsg, assert.Type+" assertion failed;")
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, responseTime))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
@@ -405,7 +405,7 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 		" " + assert.Config.Value
 	if !assertInt(int64(statusCode), assert) {
 		testStatus.status = testStatusFail
-		testStatusMsg = append(testStatusMsg, assert.Type+" assertion failed;")
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, statusCode))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
@@ -512,7 +512,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 		if assertStatus.status != testStatusOK {
 			tStatus.status = testStatusFail
-			tStatus.msg = strings.Join(testStatusMsg, ", ")
+			tStatus.msg = strings.Join(testStatusMsg, "; ")
 		}
 
 		assertChecker := map[string]string{
