@@ -377,7 +377,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 	}
 	return testStatus
 }
-func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
+func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.IP) {
 	c := checker.c
 	ctx := context.Background()
 
@@ -405,6 +405,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 
 	domainExpiry, err := checker.getDNSExpiry()
 	if err != nil {
+		fmt.Printf("error while geting domain expiry time of domain %v, err: %v\n", checker.c.Endpoint, err)
 		if errors.Is(err, errExpiryNotSet) {
 			checker.testBody["domainExpiryError"] = errExpiryNotSet.Error()
 		} else {
@@ -486,7 +487,7 @@ func (checker *dnsChecker) check() testStatus {
 		testStatus.status = testStatusFail
 		testStatus.msg = fmt.Sprintf("error resolving dns: %v", err)
 		checker.timers["duration"] = timeInMs(time.Since(start))
-		checker.processDNSResponse(testStatus, ips)
+		checker.processDNSResponse(&testStatus, ips)
 		return testStatus
 	}
 
@@ -497,7 +498,7 @@ func (checker *dnsChecker) check() testStatus {
 	checker.attrs.PutStr("resolve.ips", strings.Join(ipss, "\n"))
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
-	checker.processDNSResponse(testStatus, ips)
+	checker.processDNSResponse(&testStatus, ips)
 	return testStatus
 }
 
