@@ -151,11 +151,14 @@ func TestTCPCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			protocolChecker, _ := newTCPChecker(tt.c)
-			checker := protocolChecker.(*tcpChecker)
-			checker.netter = tt.netter
+			checker, err := newTCPChecker(tt.c)
+			if err != nil {
+				t.Errorf("Expected no error, but got: %v", err)
+			}
+			tcpChecker, _ := checker.(*tcpChecker)
+			tcpChecker.netter = tt.netter
 
-			got := checker.check()
+			got := tcpChecker.check()
 			if got.status != tt.want.status {
 				t.Fatalf("Expected status to be %s, but got %s", tt.want.status, got.status)
 			}
@@ -164,7 +167,7 @@ func TestTCPCheck(t *testing.T) {
 				t.Fatalf("Expected msg to be %s, but got %s", tt.want.msg, got.msg)
 			}
 
-			connErr, ok := checker.attrs.Get("connection.error")
+			connErr, ok := tcpChecker.attrs.Get("connection.error")
 			if ok && connErr.AsString() != tt.wantErrMsg {
 				t.Fatalf("Expected connection.error to be '%s', but got '%s'",
 					tt.wantErrMsg, connErr.AsString())
