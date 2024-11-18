@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -405,7 +406,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.
 
 	domainExpiry, err := checker.getDNSExpiry()
 	if err != nil {
-		fmt.Printf("error while geting domain expiry time of domain %v, err: %v\n", checker.c.Endpoint, err)
+		slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err))
 		if errors.Is(err, errExpiryNotSet) {
 			checker.testBody["domainExpiryError"] = errExpiryNotSet.Error()
 		} else {
