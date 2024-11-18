@@ -153,7 +153,7 @@ func TestTCPCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			checker, err := newTCPChecker(tt.c)
 			if err != nil {
-				t.Errorf("Expected no error, but got: %v", err)
+				t.Fatalf("Expected no error, but got: %v", err)
 			}
 			tcpChecker, _ := checker.(*tcpChecker)
 			tcpChecker.netter = tt.netter
