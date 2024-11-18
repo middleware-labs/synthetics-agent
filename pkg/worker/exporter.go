@@ -131,7 +131,7 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 
 	if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
 		// Request is successful.
-		body, err := io.ReadAll(resp.Body)
+		_, err := io.ReadAll(resp.Body)
 		if err != nil {
 			slog.Error("error reading body",
 				slog.String("error", err.Error()))
