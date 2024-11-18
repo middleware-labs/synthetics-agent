@@ -193,7 +193,7 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 	return testStatus
 }
 
-func (checker *wsChecker) processWSResonse(testStatus testStatus, httpResp *http.Response,
+func (checker *wsChecker) processWSResonse(testStatus *testStatus, httpResp *http.Response,
 	recMsg string) {
 	c := checker.c
 
@@ -264,7 +264,7 @@ func (checker *wsChecker) check() testStatus {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("failed to connect websocket, %v", err)
 
-		checker.processWSResonse(testStatus, httpResp, "")
+		checker.processWSResonse(&testStatus, httpResp, "")
 		return testStatus
 	}
 
@@ -275,7 +275,7 @@ func (checker *wsChecker) check() testStatus {
 	if err != nil {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("failed to set WriteDeadline, %v", err)
-		checker.processWSResonse(testStatus, httpResp, "")
+		checker.processWSResonse(&testStatus, httpResp, "")
 		return testStatus
 
 	}
@@ -285,7 +285,7 @@ func (checker *wsChecker) check() testStatus {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("failed to set ReadDeadline, %v", err)
 
-		checker.processWSResonse(testStatus, httpResp, "")
+		checker.processWSResonse(&testStatus, httpResp, "")
 		return testStatus
 	}
 
@@ -294,7 +294,7 @@ func (checker *wsChecker) check() testStatus {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("write message to ws failed, %v", err.Error())
 
-		checker.processWSResonse(testStatus, httpResp, "")
+		checker.processWSResonse(&testStatus, httpResp, "")
 		return testStatus
 	}
 
@@ -306,7 +306,7 @@ func (checker *wsChecker) check() testStatus {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("read message failed, %v", mErr.Error())
 
-		checker.processWSResonse(testStatus, httpResp, "")
+		checker.processWSResonse(&testStatus, httpResp, "")
 		return testStatus
 	}
 
@@ -315,7 +315,7 @@ func (checker *wsChecker) check() testStatus {
 	checker.attrs.PutInt("ws.message_length", int64(len(msg)))
 	checker.testBody["received_message"] = string(msg)
 
-	checker.processWSResonse(testStatus, httpResp, "")
+	checker.processWSResonse(&testStatus, httpResp, "")
 	return testStatus
 }
 
