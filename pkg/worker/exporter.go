@@ -141,9 +141,7 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 		slog.Error("error exporting items", slog.String("duration", time.Since(start).String()),
 			slog.String("endpoint", endpoint),
 			slog.Int("status", resp.StatusCode),
-			slog.String("body", string(body)),
-			slog.String("account key", cs.check.AccountKey),
-			slog.Any("check", cs.check))
+			slog.String("account key", cs.check.AccountKey))
 		return err
 	}
 	//slog.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
