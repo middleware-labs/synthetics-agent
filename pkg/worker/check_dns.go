@@ -414,11 +414,15 @@ func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.
 		}
 		checker.testBody["domainExpiry"] = ""
 	} else {
+		assertVal := domainExpiry
+		if domainExpiry > 15 {
+			assertVal = 15
+		}
 		asr = append(asr, map[string]interface{}{
 			"type": assertTypeDNSDomainRegistrationExpiry,
 			"config": map[string]string{
 				"operator": "greater_than",
-				"value":    fmt.Sprintf("%v", domainExpiry),
+				"value":    fmt.Sprintf("%v", assertVal),
 			},
 		})
 
