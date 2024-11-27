@@ -168,13 +168,14 @@ func lookupCNAME(ctx context.Context, endpoint string,
 }
 
 type dnsChecker struct {
-	c          SyntheticCheck
-	lookup     []map[string]string
-	resolver   resolver
-	timers     map[string]float64
-	testBody   map[string]interface{}
-	assertions []map[string]string
-	attrs      pcommon.Map
+	c                 SyntheticCheck
+	lookup            []map[string]string
+	resolver          resolver
+	timers            map[string]float64
+	testBody          map[string]interface{}
+	assertions        []map[string]string
+	attrs             pcommon.Map
+	domainExpiryStore *DomainExpiryCache
 }
 
 func newDNSChecker(c SyntheticCheck) protocolChecker {
@@ -204,8 +205,9 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 			"assertions": make([]map[string]interface{}, 0),
 			"tookMs":     "0 ms",
 		},
-		assertions: make([]map[string]string, 0),
-		attrs:      pcommon.NewMap(),
+		assertions:        make([]map[string]string, 0),
+		attrs:             pcommon.NewMap(),
+		domainExpiryStore: GetDomainExpiryStoreInstance(),
 	}
 }
 
@@ -354,14 +356,13 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["status"] = testStatusOK
 			expiry, err := checker.getDNSExpiry()
 			if err != nil {
-				fmt.Printf("\nerror while getting DNS expiry for domain '%s': %s\n", checker.c.Endpoint, err.Error())
+				slog.Error("error while getting DNS expiry for domain", slog.String("endpoint", checker.c.Endpoint), slog.String("err", err.Error()))
 				ck["status"] = testStatusError
 				ck["reason"] = "Error while getting domain expiration"
 				ck["actual"] = "N/A"
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s failed, error while geting the domain expiry: %s, ", assert.Type, assert.Config.Operator, assert.Config.Value, err))
 				testStatus.status = testStatusError
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
-				return testStatus
 			} else {
 				ck["actual"] = strconv.Itoa(expiry)
 				ck["reason"] = "domain registration expiry assertion passed"
@@ -520,6 +521,13 @@ func (checker *dnsChecker) getTestResponseBody() map[string]interface{} {
 }
 
 func (checker *dnsChecker) getDNSExpiry() (int, error) {
+	cacheKey := checker.c.Id
+	if entry, found := checker.domainExpiryStore.GetCache(cacheKey); found {
+		if time.Since(entry.Timestamp) < 24*time.Hour {
+			return entry.ExpiryDays, nil
+		}
+	}
+
 	rawWhoisData, err := whois.Whois(checker.c.Endpoint)
 	if err != nil {
 		return 0, err
@@ -541,7 +549,14 @@ func (checker *dnsChecker) getDNSExpiry() (int, error) {
 	}
 
 	expiryDuration := parsedData.Domain.ExpirationDateInTime.Sub(time.Now().Local())
+	expiryDays := int(expiryDuration.Hours() / 24) // duration -> days
 
-	// Convert the duration to days
-	return int(expiryDuration.Hours() / 24), nil
+	// Update the cache
+	checker.domainExpiryStore.AddOrUpdateCache(cacheKey, CacheEntry{
+		ExpiryDays: expiryDays,
+		Timestamp:  time.Now(),
+	})
+
+	slog.Info("fetched expiry", slog.String("domain", checker.c.Endpoint), slog.Int("expiryDays", expiryDays))
+	return expiryDays, nil
 }
