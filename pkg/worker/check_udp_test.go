@@ -204,9 +204,13 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checker := newUDPChecker(tt.c).(*udpChecker)
+			checker, err := newUDPChecker(tt.c)
+			if err != nil {
+				t.Fatalf("Expected no error, but got: %v", err)
+			}
+			udpChecker, _ := checker.(*udpChecker)
 
-			checker.processUDPResponse(&tt.inputTestStatus, tt.received)
+			udpChecker.processUDPResponse(&tt.inputTestStatus, tt.received)
 
 			// check that the status is OK
 			if tt.wantTestStatus.status != tt.inputTestStatus.status &&
@@ -220,30 +224,30 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 				return
 			}
 
-			if checker.c.Request.Assertions.UDP.Cases == nil {
+			if udpChecker.c.Request.Assertions.UDP.Cases == nil {
 				t.Fatalf("%s: assertions modified for test requests", tt.name)
 			}
 
-			if checker.attrs.Len() == 0 {
+			if udpChecker.attrs.Len() == 0 {
 				t.Fatalf("%s: attributes not set, length 0", tt.name)
 			}
 
 			var assertions []map[string]string
-			assertionVal, ok := checker.attrs.Get("assertions")
+			assertionVal, ok := udpChecker.attrs.Get("assertions")
 			if !ok {
 				t.Fatalf("%s: assertions attribute not found", tt.name)
 			}
 
-			err := json.Unmarshal([]byte(assertionVal.AsString()), &assertions)
+			err = json.Unmarshal([]byte(assertionVal.AsString()), &assertions)
 			if err != nil {
 				t.Fatalf("%s: assertions attribute not a valid JSON string", tt.name)
 			}
 
-			if len(assertions) != len(checker.c.Request.Assertions.UDP.Cases) {
+			if len(assertions) != len(udpChecker.c.Request.Assertions.UDP.Cases) {
 				t.Fatalf("%s: assertions attribute does not have same number of cases as the request", tt.name)
 			}
 
-			for i, assert := range checker.c.Request.Assertions.UDP.Cases {
+			for i, assert := range udpChecker.c.Request.Assertions.UDP.Cases {
 				if assertions[i]["type"] != strings.ReplaceAll(assert.Type, "_", " ") {
 					t.Fatalf("%s: assertions attribute not set to a JSON string with the correct type", tt.name)
 				}
@@ -264,17 +268,17 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 				}
 			}
 
-			testBody := checker.getTestResponseBody()
+			testBody := udpChecker.getTestResponseBody()
 
 			tookMs := testBody["tookMs"].(string)
-			actualTookMs := fmt.Sprintf("%.2f ms", checker.timers["duration"])
-			if checker.c.CheckTestRequest.URL != "" &&
+			actualTookMs := fmt.Sprintf("%.2f ms", udpChecker.timers["duration"])
+			if udpChecker.c.CheckTestRequest.URL != "" &&
 				tookMs != actualTookMs {
 				t.Fatalf("%s: expected tookMs %v, but got %v", tt.name,
 					tookMs, actualTookMs)
 			}
 			udpStatus := testBody["udp_status"].(string)
-			if checker.c.CheckTestRequest.URL != "" &&
+			if udpChecker.c.CheckTestRequest.URL != "" &&
 				udpStatus != tt.expectedStatus {
 				t.Fatalf("%s: expected udp_status %v, but got %v", tt.name,
 					tt.expectedStatus, udpStatus)
@@ -475,7 +479,12 @@ func TestUDPCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			udpChecker := newUDPChecker(tt.c).(*udpChecker)
+			checker, err := newUDPChecker(tt.c)
+			if err != nil {
+				t.Fatalf("Expected no error, but got: %v", err)
+			}
+			udpChecker, _ := checker.(*udpChecker)
+
 			if tt.netHelper != nil {
 				udpChecker.netHelper = tt.netHelper
 			}
