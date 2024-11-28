@@ -356,7 +356,7 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["status"] = testStatusOK
 			expiry, err := checker.getDNSExpiry()
 			if err != nil {
-				slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err))
+				slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err.Error()))
 				ck["status"] = testStatusError
 				ck["reason"] = "Error while getting domain expiration"
 				ck["actual"] = "N/A"
@@ -407,7 +407,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.
 
 	domainExpiry, err := checker.getDNSExpiry()
 	if err != nil {
-		slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err))
+		slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err.Error()))
 		if errors.Is(err, errExpiryNotSet) {
 			checker.testBody["domainExpiryError"] = errExpiryNotSet.Error()
 		} else {
