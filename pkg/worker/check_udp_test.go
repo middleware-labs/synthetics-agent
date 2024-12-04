@@ -204,8 +204,8 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checker := newUDPChecker(tt.c).(*udpChecker)
-
+			protocolChecker, _ := newUDPChecker(tt.c)
+			checker := protocolChecker.(*udpChecker)
 			checker.processUDPResponse(&tt.inputTestStatus, tt.received)
 
 			// check that the status is OK
@@ -475,7 +475,8 @@ func TestUDPCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			udpChecker := newUDPChecker(tt.c).(*udpChecker)
+			protocolChecker, _ := newUDPChecker(tt.c)
+			udpChecker := protocolChecker.(*udpChecker)
 			if tt.netHelper != nil {
 				udpChecker.netHelper = tt.netHelper
 			}
