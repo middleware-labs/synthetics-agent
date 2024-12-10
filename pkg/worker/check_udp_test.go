@@ -206,7 +206,7 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			checker, err := newUDPChecker(tt.c)
 			if err != nil {
-				t.Errorf("Expected no error, but got: %v", err)
+				t.Fatalf("Expected no error, but got: %v", err)
 			}
 			udpChecker, _ := checker.(*udpChecker)
 
@@ -481,7 +481,7 @@ func TestUDPCheck(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			checker, err := newUDPChecker(tt.c)
 			if err != nil {
-				t.Errorf("Expected no error, but got: %v", err)
+				t.Fatalf("Expected no error, but got: %v", err)
 			}
 			udpChecker, _ := checker.(*udpChecker)
 

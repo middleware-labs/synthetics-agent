@@ -1,6 +1,6 @@
 module github.com/middleware-labs/synthetics-agent
 
-go 1.22
+go 1.23
 
 require (
 	github.com/adakailabs/go-traceroute v0.0.0-20210727014431-97524352ab91
