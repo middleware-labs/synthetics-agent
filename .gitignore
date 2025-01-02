@@ -23,3 +23,5 @@ go.work
 # ide
 .vscode
 .idea
+node_modules/
+screenshots/

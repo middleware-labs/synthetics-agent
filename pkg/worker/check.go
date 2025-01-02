@@ -237,20 +237,47 @@ func (cs *CheckState) fire() error {
 
 	}
 
-	protocolChecker, err := getProtocolChecker(c)
-	if err != nil {
-		return err
-	}
+	if c.Proto == "browser" {
+		browserChecker := newBrowserChecker(c)
+		browsers := c.CheckTestRequest.Browsers
+		var wg sync.WaitGroup
 
-	testStatus := protocolChecker.check()
+		for browser, devices := range browsers {
+			for _, device := range devices {
+				wg.Add(1)
+				go func(browser string) {
+					defer wg.Done()
+					commandArgs := commandArgs{
+						browser:    browser,
+						collectRum: true,
+						device:     device,
+						region:     c.Locations,
+						testId:     fmt.Sprintf("%d-%s-%d", c.Uid, c.Locations, time.Now().UnixNano()),
+					}
+					browserChecker.cmdArgs = commandArgs
+					testStatus := browserChecker.check()
+					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
+				}(browser)
+			}
+		}
 
-	isTestReq := c.CheckTestRequest.URL != ""
-	if isTestReq {
-		cs.finishTestRequest(protocolChecker.getTestResponseBody())
+		wg.Wait()
 	} else {
-		cs.finishCheckRequest(testStatus,
-			protocolChecker.getTimers(),
-			protocolChecker.getAttrs())
+		protocolChecker, err := getProtocolChecker(c)
+		if err != nil {
+			return err
+		}
+
+		testStatus := protocolChecker.check()
+
+		isTestReq := c.CheckTestRequest.URL != ""
+		if isTestReq {
+			cs.finishTestRequest(protocolChecker.getTestResponseBody())
+		} else {
+			cs.finishCheckRequest(testStatus,
+				protocolChecker.getTimers(),
+				protocolChecker.getAttrs())
+		}
 	}
 
 	return nil

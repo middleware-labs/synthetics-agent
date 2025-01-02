@@ -1,0 +1,21 @@
+{
+  "name": "browser-tests",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@playwright/test": "^1.49.1",
+    "@puppeteer/replay": "^3.1.1",
+    "command-line-args": "^6.0.1",
+    "playwright": "^1.49.1",
+    "playwright-chrome-recorder": "^1.0.2",
+    "playwright-lighthouse": "^4.0.0",
+    "puppeteer": "^23.11.1"
+  }
+}

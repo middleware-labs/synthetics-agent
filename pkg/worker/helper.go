@@ -38,6 +38,7 @@ type CheckTestRequestHeaders struct {
 type CheckTestRequest struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
+	Browsers map[string][]string         `json:"browsers"`
 }
 
 type SyntheticsExpectMeta struct {
