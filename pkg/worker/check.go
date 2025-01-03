@@ -238,27 +238,27 @@ func (cs *CheckState) fire() error {
 	}
 
 	if c.Proto == "browser" {
-		browserChecker := newBrowserChecker(c)
+		browserChecker := NewBrowserChecker(c)
 		browsers := c.CheckTestRequest.Browsers
 		var wg sync.WaitGroup
 
 		for browser, devices := range browsers {
-			for _, device := range devices {
-				wg.Add(1)
-				go func(browser string) {
-					defer wg.Done()
-					commandArgs := commandArgs{
-						browser:    browser,
-						collectRum: true,
-						device:     device,
-						region:     c.Locations,
-						testId:     fmt.Sprintf("%d-%s-%d", c.Uid, c.Locations, time.Now().UnixNano()),
+			wg.Add(1)
+			go func(browser string) {
+				defer wg.Done()
+				for _, device := range devices {
+					commandArgs := CommandArgs{
+						Browser:    browser,
+						CollectRum: true,
+						Device:     device,
+						Region:     c.Locations,
+						TestId:     fmt.Sprintf("%s-%s-%s", string(c.Uid), "india", string(rune(time.Now().UnixNano()))),
 					}
-					browserChecker.cmdArgs = commandArgs
-					testStatus := browserChecker.check()
+					browserChecker.CmdArgs = commandArgs
+					testStatus := browserChecker.Check()
 					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
-				}(browser)
-			}
+				}
+			}(browser)
 		}
 
 		wg.Wait()

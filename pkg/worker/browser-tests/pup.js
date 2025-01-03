@@ -255,9 +255,11 @@ function saveReport(data) {
 (async function run() {
   const optionDefinitions = [
     { name: "browser", alias: "b", type: String },
-    { name: "checkId", alias: "i", type: String },
+    { name: "testId", alias: "i", type: String },
+    { name: "recording", alias: "j", type: String },
     { name: "collectRum", type: Boolean },
     { name: "region", alias: "r", type: String },
+    { name: "device", alias: "d", type: String },
   ];
 
   const cmdArgs = commandLineArgs(optionDefinitions);
@@ -267,17 +269,16 @@ function saveReport(data) {
     headless: false,
   });
 
-  if (!cmdArgs.checkId) {
-    console.error("Check ID is required");
+  if (!cmdArgs.testId) {
+    console.error("Test ID is required");
     process.exit(1);
   }
-  const testId = `${cmdArgs.checkId}-${
-    cmdArgs.region || "default"
-  }-${Date.now()}`;
+  const testId = cmdArgs.testId;
 
   const page = await browser.newPage();
+  console.log(cmdArgs.recording)
   const recordingFile = fs.readFileSync(
-    "/home/archish/code/synthetics-agent/pkg/worker/browser-tests/recording1.json",
+    cmdArgs.recording,
     "utf8"
   );
   const recording = JSON.parse(recordingFile);

@@ -1,0 +1,26 @@
+
+	{
+		"title": "Recording 01/01/2025 at 19:04:54",
+		"steps": [
+			{
+				"type": "setViewport",
+				"width": 1905,
+				"height": 366,
+				"deviceScaleFactor": 1,
+				"isMobile": false,
+				"hasTouch": false,
+				"isLandscape": false
+			},
+			{
+				"type": "navigate",
+				"url": "https://www.google.com/",
+				"assertedEvents": [
+					{
+						"type": "navigation",
+						"url": "https://www.google.com/",
+						"title": ""
+					}
+				]
+			}
+		]
+	}

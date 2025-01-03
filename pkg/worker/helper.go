@@ -2,8 +2,9 @@
 package worker
 
 import (
-	"time"
+	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type SyntheticsModel struct {
@@ -39,6 +40,7 @@ type CheckTestRequest struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers"`
 	Browsers map[string][]string         `json:"browsers"`
+	Recording json.RawMessage `json:"recording"`
 }
 
 type SyntheticsExpectMeta struct {
