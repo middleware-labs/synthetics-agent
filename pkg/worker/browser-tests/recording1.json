@@ -3,8 +3,8 @@
     "steps": [
         {
             "type": "setViewport",
-            "width": 1905,
-            "height": 366,
+            "width": 1440,
+            "height": 1080,
             "deviceScaleFactor": 1,
             "isMobile": false,
             "hasTouch": false,

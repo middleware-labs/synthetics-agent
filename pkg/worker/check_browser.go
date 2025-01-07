@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -72,8 +73,77 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 		fmt.Printf("Error writing JSON to file: %v\n", err)
 		return testStatus{status: testStatusError, msg: "Error writing JSON to file"}
 	}
-	// Create command with browser option
-	cmd := exec.Command("node", nodeScript, "--browser", args.Browser, "--collectRum", "--device", args.Device, "--region", args.Region, "--testId", args.TestId, "--recording", recordingJson)
+
+	argsArray := []string{
+		nodeScript,
+		"--browser", args.Browser,
+		"--collectRum",
+		"--device", args.Device,
+		"--region", args.Region,
+		"--testId", args.TestId,
+		"--recording", recordingJson,
+	}
+
+	if !checker.c.Request.TakeScreenshots {
+		argsArray = append(argsArray, "--no-screenshots")
+	}
+	if checker.c.Request.HTTPPayload.IgnoreServerCertificateError {
+		argsArray = append(argsArray, "--ignore-certificate-errors")
+	}
+	if checker.c.Request.HTTPPayload.Proxy.URL != "" {
+		argsArray = append(argsArray, "--proxy-server")
+		argsArray = append(argsArray, checker.c.Request.HTTPPayload.Proxy.URL)
+	}
+
+	if checker.c.Request.Timezone != "" {
+		argsArray = append(argsArray, "--timezone")
+		argsArray = append(argsArray, checker.c.Request.Timezone)
+	}
+
+	if checker.c.Request.Language != "" {
+		argsArray = append(argsArray, "--language", checker.c.Request.Timezone)
+	}
+
+	if checker.c.Request.HTTPPayload.Authentication.Basic.Username != "" && checker.c.Request.HTTPPayload.Authentication.Basic.Password != "" {
+		argsArray = append(argsArray, "--username", checker.c.Request.HTTPPayload.Authentication.Basic.Username, "--password", checker.c.Request.HTTPPayload.Authentication.Basic.Password)
+	}
+	if checker.c.Request.HTTPPayload.Cookies != "" {
+		argsArray = append(argsArray, fmt.Sprintf("--cookies=%s", checker.c.Request.HTTPPayload.Cookies))
+	}
+
+	if checker.c.Request.DisableCors {
+		argsArray = append(argsArray, "--disableCors")
+	}
+
+	if checker.c.Request.DisableCSP {
+		argsArray = append(argsArray, "--disableCsp")
+	}
+
+	if len(checker.c.CheckTestRequest.Headers) > 0 {
+		jsonString, err := json.Marshal(checker.c.CheckTestRequest.Headers)
+		fmt.Println(string(jsonString))
+		if err == nil {
+			argsArray = append(argsArray, "--headers")
+			argsArray = append(argsArray, string(jsonString))
+		}
+	}
+
+	if checker.c.CheckTestRequest.Timeout != 0 {
+		argsArray = append(argsArray, "--waitTimeout")
+		argsArray = append(argsArray, checker.c.Request.Timezone)
+	}
+
+	if checker.c.Request.SslCertificatePrivateKey != "" {
+		argsArray = append(argsArray, "--sslCertificatePrivateKey")
+		argsArray = append(argsArray, checker.c.Request.SslCertificatePrivateKey)
+	}
+
+	if checker.c.Request.SslCertificate != "" {
+		argsArray = append(argsArray, "--sslCertificate")
+		argsArray = append(argsArray, checker.c.Request.SslCertificate)
+	}
+
+	cmd := exec.Command("node", argsArray...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

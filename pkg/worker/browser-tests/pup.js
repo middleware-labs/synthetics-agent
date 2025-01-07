@@ -1,12 +1,19 @@
 import { createRunner, PuppeteerRunnerExtension } from "@puppeteer/replay";
-import puppeteer, { Browser } from "puppeteer";
-import fs, { stat } from "fs";
-import path from "path";
 import commandLineArgs from "command-line-args";
-import { type } from "os";
+import fs from "fs";
+import path from "path";
+import puppeteer from "puppeteer";
+import {
+  BROWSER_EXECUTABLE_PATH_MAPPING,
+  DEVICE_VIEWPORT_MAPPING,
+  FAILED,
+  PASSED,
+  SKIPPED,
+} from "./constant.js";
+import cookie from "cookie";
 
 class Extension extends PuppeteerRunnerExtension {
-  constructor(testId, browser, page, options, config) {
+  constructor(testId, browser, page, options, config, cmdArgs) {
     super(browser, page, options);
     this.activeStep = null;
     this.testId = testId;
@@ -18,6 +25,7 @@ class Extension extends PuppeteerRunnerExtension {
       duration: 0,
     };
     this.stepCount = -1;
+    this.cmdArgs = cmdArgs;
   }
 
   async captureResources(page) {
@@ -73,20 +81,22 @@ class Extension extends PuppeteerRunnerExtension {
       await super.runStep(step, flow);
     } catch (e) {
       console.error("After Step error", e);
-      this.activeStep.result.status = "FAILED";
+      this.activeStep.result.status = FAILED;
       this.activeStep.result.error = e.message;
       this.activeStep.result.webVitals = [];
       this.activeStep.result.jsErrors = [];
       this.activeStep.result.jsWarn = [];
       this.activeStep.result.resources = [];
-      await this.takeScreenshot(this.activeStep);
+      if (this.cmdArgs.screenshots && !this.cmdArgs["no-screenshots"]) {
+        await this.takeScreenshot(this.activeStep);
+      }
       this.testReport.steps.push(this.activeStep);
       const skippedSteps = flow.steps.slice(
         flow.steps.indexOf(this.activeStep) + 1,
         flow.steps.length
       );
       skippedSteps.forEach((step) => {
-        step.result.status = "SKIPPED";
+        step.result.status = SKIPPED;
       });
       this.testReport.steps.push(...skippedSteps);
       this.testReport.duration = Math.round(
@@ -105,7 +115,10 @@ class Extension extends PuppeteerRunnerExtension {
   async afterEachStep(step, flow) {
     await super.afterEachStep(step, flow);
     console.log("after", step);
-    await this.takeScreenshot(step);
+    console.log("cmdn", this.cmdArgs);
+    if (this.cmdArgs["screenshots"] && !this.cmdArgs["no-screenshots"]) {
+      await this.takeScreenshot(step);
+    }
     const endTime = performance.now();
     step.result.duration = Math.round(endTime - step.result.startTime);
     step.result.resources = await this.captureResources(this.page);
@@ -122,7 +135,7 @@ class Extension extends PuppeteerRunnerExtension {
     step.result.jsErrors = [];
     step.result.jsWarn = [];
     step.result.webVitals = webVitals;
-    step.result.status = "PASSED";
+    step.result.status = PASSED;
     step.result.description =
       step.title || `${step.type} ${step.url || step.key || step.value}`;
     await this.page.evaluate(() => {
@@ -260,13 +273,50 @@ function saveReport(data) {
     { name: "collectRum", type: Boolean },
     { name: "region", alias: "r", type: String },
     { name: "device", alias: "d", type: String },
+    { name: "ignore-certificate-errors", type: Boolean },
+    { name: "screenshots", alias: "s", type: Boolean, defaultValue: true },
+    { name: "no-screenshots", type: Boolean },
+    { name: "proxy-server", alias: "p", type: String },
+    { name: "username", type: String },
+    { name: "password", type: String },
+    { name: "disableCors", type: Boolean },
+    { name: "disableCsp", type: Boolean },
+    { name: "headers", type: String },
+    { name: "waitTimeout", type: Number, defaultValue: 0 },
+    { name: "sslCertificatePrivateKey", type: String},
+    { name: "sslCertificate", type: String },
   ];
 
   const cmdArgs = commandLineArgs(optionDefinitions);
+  console.log(cmdArgs);
 
+  const browserArgs = [];
+  if (cmdArgs["proxy-server"]) {
+    browserArgs.push(`--proxy-server=${cmdArgs["proxy-server"]}`);
+  }
+
+  if (cmdArgs["disableCors"]) {
+    browserArgs.push("--disable-web-security");
+  }
+
+  if (cmdArgs["disableCsp"]) {
+    browserArgs.push("--disable-features=IsolateOrigins,site-per-process");
+    browserArgs.push("--allow-running-insecure-content");
+  }
+
+  if(cmdArgs.sslCertificate && cmdArgs.sslCertificatePrivateKey) {
+    const formattedCertificate = certificate.replace(/\\n/g, '\n');
+    const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
+    browserArgs.push(`--ssl-client-certificate=${formattedCertificate}`)
+    browserArgs.push(`--ssl-client-key=${formattedPrivateKey}`)
+  }
+
+  const decidedBrowser = cmdArgs.browser || "chrome";
   const browser = await puppeteer.launch({
-    browser: cmdArgs.browser || "chrome",
+    executablePath: BROWSER_EXECUTABLE_PATH_MAPPING[decidedBrowser],
     headless: false,
+    acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
+    args: browserArgs,
   });
 
   if (!cmdArgs.testId) {
@@ -276,16 +326,13 @@ function saveReport(data) {
   const testId = cmdArgs.testId;
 
   const page = await browser.newPage();
-  console.log(cmdArgs.recording)
-  const recordingFile = fs.readFileSync(
-    cmdArgs.recording,
-    "utf8"
-  );
+  console.log(cmdArgs.recording);
+  const recordingFile = fs.readFileSync(cmdArgs.recording, "utf8");
   const recording = JSON.parse(recordingFile);
   recording.testId = testId;
   recording.steps = recording.steps.map((step) => {
     step.result = {
-      status: "SKIPPED",
+      status: SKIPPED,
       jsErrors: [],
       jsWarn: [],
       resources: [],
@@ -297,6 +344,42 @@ function saveReport(data) {
 
     return step;
   });
+
+  if (cmdArgs["timezone"]) {
+    await page.emulateTimezone(cmdArgs["timezone"]);
+  }
+
+  if (cmdArgs["language"]) {
+    await page.setExtraHTTPHeaders({
+      "Accept-Language": cmdArgs["language"],
+    });
+  }
+
+  if (cmdArgs["username"] && cmdArgs["password"]) {
+    await page.authenticate({
+      username: cmdArgs["username"],
+      password: cmdArgs["password"],
+    });
+  }
+
+
+  if (cmdArgs["cookies"]) {
+    const cookiesList = cmdArgs["cookies"].split(",");
+    const kookies = cookiesList.map((kookie) => cookie.parse(kookie));
+    await browser.setCookie(...kookies);
+  }
+
+  if (cmdArgs["disableCsp"]) {
+    await page.setBypassCSP(true);
+  }
+
+  if(cmdArgs["headers"]) {
+    try{
+      const headers = JSON.parse(cmdArgs["headers"])  
+      await page.setExtraHTTPHeaders(headers)
+    } catch(e) {}
+  }
+
   await page.evaluateOnNewDocument(calcJank, cmdArgs);
 
   const userAgent = await page.evaluate(() => navigator.userAgent);
@@ -305,15 +388,12 @@ function saveReport(data) {
     testId,
     browser,
     page,
-    { timeout: 0 },
+    { timeout: cmdArgs["waitTimeout"] },
     {
       region: cmdArgs.region,
-      device: {
-        browser: cmdArgs.browser || "chrome",
-        userAgent,
-        isMobile: false,
-      },
-    }
+      device: { ...DEVICE_VIEWPORT_MAPPING[decidedBrowser], userAgent },
+    },
+    cmdArgs
   );
   const runner = await createRunner(recording, extension);
   await page.on("console", (msg) => {
@@ -332,20 +412,22 @@ function saveReport(data) {
   try {
   } catch (e) {
     console.error(e);
-    extension.activeStep.result.status = "FAILED";
+    extension.activeStep.result.status = FAILED;
     extension.activeStep.result.error = e.message;
     extension.activeStep.result.webVitals = [];
     extension.activeStep.result.jsErrors = [];
     extension.activeStep.result.jsWarn = [];
     extension.activeStep.result.resources = [];
-    await extension.takeScreenshot(extension.activeStep);
+    if (cmdArgs.screenshots && !cmdArgs["no-screenshots"]) {
+      await extension.takeScreenshot(extension.activeStep);
+    }
     extension.testReport.steps.push(extension.activeStep);
     const skippedSteps = recording.steps.slice(
       recording.steps.indexOf(extension.activeStep) + 1,
       recording.steps.length
     );
     skippedSteps.forEach((step) => {
-      step.result.status = "SKIPPED";
+      step.result.status = SKIPPED;
     });
     extension.testReport.steps.push(...skippedSteps);
     extension.testReport.duration = Math.round(
