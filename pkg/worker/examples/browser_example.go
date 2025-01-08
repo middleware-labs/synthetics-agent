@@ -50,7 +50,7 @@ func main() {
 			Status:          "active",
 			Tags:            []string{"browser", "example", "test"},
 			Request: worker.SyntheticsRequestOptions{
-				TakeScreenshots: true,
+				TakeScreenshots: false,
 				HTTPPayload:     worker.HTTPPayloadOptions{IgnoreServerCertificateError: true},
 			},
 			CreatedAt:  time.Now(),
@@ -72,7 +72,8 @@ func main() {
 					// "firefox": {"laptop"},
 					"edge": {"laptop"},
 				},
-				Recording: json.RawMessage(recordingData),
+				Recording:  json.RawMessage(recordingData),
+				StepsCount: 10,
 			},
 		},
 	}

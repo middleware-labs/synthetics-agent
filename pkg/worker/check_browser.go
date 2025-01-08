@@ -7,9 +7,13 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/middleware-labs/synthetics-agent/pkg/worker/objectstorage"
 	"github.com/middleware-labs/synthetics-agent/pkg/worker/objectstorage/azure"
@@ -96,19 +100,18 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 	}
 
 	if checker.c.Request.Timezone != "" {
-		argsArray = append(argsArray, "--timezone")
-		argsArray = append(argsArray, checker.c.Request.Timezone)
+		argsArray = append(argsArray, "--timezone", checker.c.Request.Timezone)
 	}
 
 	if checker.c.Request.Language != "" {
-		argsArray = append(argsArray, "--language", checker.c.Request.Timezone)
+		argsArray = append(argsArray, "--language", checker.c.Request.Language)
 	}
 
 	if checker.c.Request.HTTPPayload.Authentication.Basic.Username != "" && checker.c.Request.HTTPPayload.Authentication.Basic.Password != "" {
 		argsArray = append(argsArray, "--username", checker.c.Request.HTTPPayload.Authentication.Basic.Username, "--password", checker.c.Request.HTTPPayload.Authentication.Basic.Password)
 	}
 	if checker.c.Request.HTTPPayload.Cookies != "" {
-		argsArray = append(argsArray, fmt.Sprintf("--cookies=%s", checker.c.Request.HTTPPayload.Cookies))
+		argsArray = append(argsArray, "--cookies", checker.c.Request.HTTPPayload.Cookies)
 	}
 
 	if checker.c.Request.DisableCors {
@@ -129,20 +132,31 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 	}
 
 	if checker.c.CheckTestRequest.Timeout != 0 {
-		argsArray = append(argsArray, "--waitTimeout")
-		argsArray = append(argsArray, checker.c.Request.Timezone)
+		argsArray = append(argsArray, "--waitTimeout", strconv.Itoa(checker.c.CheckTestRequest.Timeout))
 	}
 
 	if checker.c.Request.SslCertificatePrivateKey != "" {
-		argsArray = append(argsArray, "--sslCertificatePrivateKey")
-		argsArray = append(argsArray, checker.c.Request.SslCertificatePrivateKey)
+		argsArray = append(argsArray, "--sslCertificatePrivateKey", checker.c.Request.SslCertificatePrivateKey)
 	}
 
 	if checker.c.Request.SslCertificate != "" {
-		argsArray = append(argsArray, "--sslCertificate")
-		argsArray = append(argsArray, checker.c.Request.SslCertificate)
+		argsArray = append(argsArray, "--sslCertificate", checker.c.Request.SslCertificate)
 	}
 
+	if checker.c.CheckTestRequest.StepsCount != 0 && checker.c.Request.TakeScreenshots {
+		screenshotUrls := []string{}
+		for steps := 0; steps < checker.c.CheckTestRequest.StepsCount; steps++ {
+			screenshotPath := path.Join("browser-tests", "screenshots", args.TestId, fmt.Sprintf("step-%d.png", steps))
+			screenshotUrl, err := checker.screenshotStorage.GetPreSignedUploadUrl(screenshotPath, 30*24*time.Hour)
+			if err == nil && screenshotUrl != "" {
+				screenshotUrl = screenshotPath //TODO: remove this
+				screenshotUrls = append(screenshotUrls, screenshotUrl)
+			}
+		}
+		argsArray = append(argsArray, "--screenshotsUrl", strings.Join(screenshotUrls, ","))
+	}
+
+	fmt.Println("node", argsArray)
 	cmd := exec.Command("node", argsArray...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -154,13 +168,13 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 		log.Printf("Error running Node.js script for %s: %v\nOutput: %s", args.Browser, err, out.String())
 		return tStatus
 	}
-
+	fmt.Println("test_report:", out.String())
 	checker.attrs.PutStr("test_report", out.String())
 	return tStatus
 }
 
 func (checker *browserChecker) uploadScreenshots(filePath string, testId string) {
-	screenshotDir := filepath.Join("%s/screenshots", testId)
+	screenshotDir := path.Join(filePath, "browser-tests", "screenshots", testId)
 
 	files, err := os.ReadDir(screenshotDir)
 	if err != nil {
@@ -177,7 +191,8 @@ func (checker *browserChecker) uploadScreenshots(filePath string, testId string)
 		wg.Add(1)
 		go func(fileName string) {
 			defer wg.Done()
-			screenshot, err := os.ReadFile(fileName)
+			fmt.Println("fileName", fileName)
+			screenshot, err := os.ReadFile(path.Join(screenshotDir, fileName))
 			if err != nil {
 				log.Printf("Failed to read video file: %v", err)
 				return

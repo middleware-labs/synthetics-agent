@@ -11,9 +11,12 @@ import {
   SKIPPED,
 } from "./constant.js";
 import cookie from "cookie";
+import { fileURLToPath } from "url";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 class Extension extends PuppeteerRunnerExtension {
-  constructor(testId, browser, page, options, config, cmdArgs) {
+  constructor(testId, browser, page, options, config, cmdArgs, screenshotsUrl) {
     super(browser, page, options);
     this.activeStep = null;
     this.testId = testId;
@@ -26,6 +29,7 @@ class Extension extends PuppeteerRunnerExtension {
     };
     this.stepCount = -1;
     this.cmdArgs = cmdArgs;
+    this.screenshotsUrl = screenshotsUrl;
   }
 
   async captureResources(page) {
@@ -48,7 +52,7 @@ class Extension extends PuppeteerRunnerExtension {
     console.log("before", step);
     this.stepCount += 1;
     step.result = {
-      status: "SKIPPED",
+      status: SKIPPED,
       jsErrors: [],
       jsWarn: [],
       resources: [],
@@ -116,6 +120,7 @@ class Extension extends PuppeteerRunnerExtension {
     await super.afterEachStep(step, flow);
     console.log("after", step);
     console.log("cmdn", this.cmdArgs);
+    step.result.screenshotUrl = "";
     if (this.cmdArgs["screenshots"] && !this.cmdArgs["no-screenshots"]) {
       await this.takeScreenshot(step);
     }
@@ -157,17 +162,17 @@ class Extension extends PuppeteerRunnerExtension {
   }
 
   async takeScreenshot(step) {
-    const screenshotDir = path.join("screenshots", this.testId);
+    const screenshotDir = path.join(__dirname, "screenshots", this.testId);
     if (!fs.existsSync(screenshotDir)) {
       fs.mkdirSync(screenshotDir, { recursive: true });
     }
 
     const screenshotPath = path.join(
       screenshotDir,
-      `${step.name || `step-${this.stepCount}`}_${Date.now()}.png`
+      `step-${this.stepCount}.png`
     );
     await this.page.screenshot({ path: screenshotPath });
-    step.result.screenshotUrl = screenshotPath;
+    step.result.screenshotUrl = this.screenshotsUrl[this.stepCount];
     console.log(`Screenshot for step saved at ${screenshotPath}`);
   }
 }
@@ -283,8 +288,9 @@ function saveReport(data) {
     { name: "disableCsp", type: Boolean },
     { name: "headers", type: String },
     { name: "waitTimeout", type: Number, defaultValue: 0 },
-    { name: "sslCertificatePrivateKey", type: String},
+    { name: "sslCertificatePrivateKey", type: String },
     { name: "sslCertificate", type: String },
+    { name: "screenshotsUrl", type: String },
   ];
 
   const cmdArgs = commandLineArgs(optionDefinitions);
@@ -304,11 +310,11 @@ function saveReport(data) {
     browserArgs.push("--allow-running-insecure-content");
   }
 
-  if(cmdArgs.sslCertificate && cmdArgs.sslCertificatePrivateKey) {
-    const formattedCertificate = certificate.replace(/\\n/g, '\n');
-    const formattedPrivateKey = privateKey.replace(/\\n/g, '\n');
-    browserArgs.push(`--ssl-client-certificate=${formattedCertificate}`)
-    browserArgs.push(`--ssl-client-key=${formattedPrivateKey}`)
+  if (cmdArgs.sslCertificate && cmdArgs.sslCertificatePrivateKey) {
+    const formattedCertificate = certificate.replace(/\\n/g, "\n");
+    const formattedPrivateKey = privateKey.replace(/\\n/g, "\n");
+    browserArgs.push(`--ssl-client-certificate=${formattedCertificate}`);
+    browserArgs.push(`--ssl-client-key=${formattedPrivateKey}`);
   }
 
   const decidedBrowser = cmdArgs.browser || "chrome";
@@ -362,7 +368,6 @@ function saveReport(data) {
     });
   }
 
-
   if (cmdArgs["cookies"]) {
     const cookiesList = cmdArgs["cookies"].split(",");
     const kookies = cookiesList.map((kookie) => cookie.parse(kookie));
@@ -373,11 +378,15 @@ function saveReport(data) {
     await page.setBypassCSP(true);
   }
 
-  if(cmdArgs["headers"]) {
-    try{
-      const headers = JSON.parse(cmdArgs["headers"])  
-      await page.setExtraHTTPHeaders(headers)
-    } catch(e) {}
+  if (cmdArgs["headers"]) {
+    try {
+      const headers = JSON.parse(cmdArgs["headers"]);
+      await page.setExtraHTTPHeaders(headers);
+    } catch (e) {}
+  }
+  let screenshotsUrls = [];
+  if (cmdArgs["screenshotsUrl"]) {
+    screenshotsUrls = cmdArgs.screenshotsUrl.split(",");
   }
 
   await page.evaluateOnNewDocument(calcJank, cmdArgs);
@@ -393,7 +402,8 @@ function saveReport(data) {
       region: cmdArgs.region,
       device: { ...DEVICE_VIEWPORT_MAPPING[decidedBrowser], userAgent },
     },
-    cmdArgs
+    cmdArgs,
+    screenshotsUrls
   );
   const runner = await createRunner(recording, extension);
   await page.on("console", (msg) => {
