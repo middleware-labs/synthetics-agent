@@ -296,7 +296,7 @@ function saveReport(data) {
   const cmdArgs = commandLineArgs(optionDefinitions);
   console.log(cmdArgs);
 
-  const browserArgs = [];
+  const browserArgs = ["--start-maximized", "--no-sandbox"];
   if (cmdArgs["proxy-server"]) {
     browserArgs.push(`--proxy-server=${cmdArgs["proxy-server"]}`);
   }
@@ -321,6 +321,7 @@ function saveReport(data) {
   const browser = await puppeteer.launch({
     executablePath: BROWSER_EXECUTABLE_PATH_MAPPING[decidedBrowser],
     headless: false,
+    defaultViewport: null,
     acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
     args: browserArgs,
   });

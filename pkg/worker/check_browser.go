@@ -63,7 +63,7 @@ func (checker *browserChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArgs) testStatus {
+func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArgs) (testStatus, []string) {
 	tStatus := testStatus{
 		status: testStatusOK,
 	}
@@ -75,7 +75,7 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 	err := os.WriteFile(recordingJson, []byte(checker.c.CheckTestRequest.Recording), 0644)
 	if err != nil {
 		fmt.Printf("Error writing JSON to file: %v\n", err)
-		return testStatus{status: testStatusError, msg: "Error writing JSON to file"}
+		return testStatus{status: testStatusError, msg: "Error writing JSON to file"}, []string{}
 	}
 
 	argsArray := []string{
@@ -143,13 +143,12 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 		argsArray = append(argsArray, "--sslCertificate", checker.c.Request.SslCertificate)
 	}
 
+	screenshotUrls := []string{}
 	if checker.c.CheckTestRequest.StepsCount != 0 && checker.c.Request.TakeScreenshots {
-		screenshotUrls := []string{}
 		for steps := 0; steps < checker.c.CheckTestRequest.StepsCount; steps++ {
 			screenshotPath := path.Join("browser-tests", "screenshots", args.TestId, fmt.Sprintf("step-%d.png", steps))
 			screenshotUrl, err := checker.screenshotStorage.GetPreSignedUploadUrl(screenshotPath, 30*24*time.Hour)
 			if err == nil && screenshotUrl != "" {
-				screenshotUrl = screenshotPath //TODO: remove this
 				screenshotUrls = append(screenshotUrls, screenshotUrl)
 			}
 		}
@@ -166,52 +165,53 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 		tStatus.msg = fmt.Sprintf("Failed to run browser test %v", err)
 		tStatus.status = testStatusError
 		log.Printf("Error running Node.js script for %s: %v\nOutput: %s", args.Browser, err, out.String())
-		return tStatus
+		return tStatus, []string{}
 	}
 	fmt.Println("test_report:", out.String())
 	checker.attrs.PutStr("test_report", out.String())
-	return tStatus
+	return tStatus, screenshotUrls
 }
 
-func (checker *browserChecker) uploadScreenshots(filePath string, testId string) {
-	screenshotDir := path.Join(filePath, "browser-tests", "screenshots", testId)
+func (checker *browserChecker) uploadScreenshots(filePath string, testId string, screenshotsUrl []string) {
+	if len(screenshotsUrl) > 0 {
+		screenshotDir := path.Join(filePath, "browser-tests", "screenshots", testId)
 
-	files, err := os.ReadDir(screenshotDir)
-	if err != nil {
-		log.Printf("Failed to read screenshot directory for test %s: %v", testId, err)
-		return
-	}
-
-	var wg sync.WaitGroup
-	for _, file := range files {
-		if file.IsDir() {
-			continue
+		files, err := os.ReadDir(screenshotDir)
+		if err != nil {
+			log.Printf("Failed to read screenshot directory for test %s: %v", testId, err)
+			return
 		}
 
-		wg.Add(1)
-		go func(fileName string) {
-			defer wg.Done()
-			fmt.Println("fileName", fileName)
-			screenshot, err := os.ReadFile(path.Join(screenshotDir, fileName))
-			if err != nil {
-				log.Printf("Failed to read video file: %v", err)
-				return
+		var wg sync.WaitGroup
+		for index, file := range files {
+			if file.IsDir() {
+				continue
 			}
-			err = checker.screenshotStorage.Upload(bytes.NewReader(screenshot), fileName, "image/png", objectstorage.NoCompression)
-			if err != nil {
-				log.Printf("Failed to upload screenshot %s: %v", fileName, err)
-			}
-		}(file.Name())
-	}
 
-	wg.Wait()
+			wg.Add(1)
+			go func(fileName string) {
+				defer wg.Done()
+				fmt.Println("fileName", fileName)
+				screenshot, err := os.ReadFile(path.Join(screenshotDir, fileName))
+				if err != nil {
+					log.Printf("Failed to read video file: %v", err)
+					return
+				}
+				err = checker.screenshotStorage.UploadPreSignedURL(screenshotsUrl[index], bytes.NewReader(screenshot), "image/png")
+				if err != nil {
+					log.Printf("Failed to upload screenshot %s: %v", fileName, err)
+				}
+			}(file.Name())
+		}
+		wg.Wait()
+	}
 }
 
 func (checker *browserChecker) Check() testStatus {
 	args := checker.CmdArgs
 	_, filePath, _, _ := runtime.Caller(0)
 	currentDir := filepath.Dir(filePath)
-	testStatus := checker.runBrowserTest(currentDir, args)
-	checker.uploadScreenshots(currentDir, args.TestId)
+	testStatus, screenshotsUrl := checker.runBrowserTest(currentDir, args)
+	checker.uploadScreenshots(currentDir, args.TestId, screenshotsUrl)
 	return testStatus
 }

@@ -1,9 +1,11 @@
 package azure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"time"
@@ -57,6 +59,35 @@ func (s *storageImpl) Upload(reader io.Reader, key string, contentType string, c
 			Metadata: s.tagging(),
 		})
 	return err
+}
+
+func (s *storageImpl) UploadPreSignedURL(preSignedURL string, reader io.Reader, contentType string) error {
+	buf := new(bytes.Buffer)
+	_, err := io.Copy(buf, reader)
+	if err != nil {
+		return fmt.Errorf("failed to read content into buffer: %v", err)
+	}
+
+	req, err := http.NewRequest("PUT", preSignedURL, buf)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("x-ms-blob-type", "BlockBlob")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to upload to pre-signed URL: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
 }
 
 func (s *storageImpl) Get(key string) (io.ReadCloser, error) {
