@@ -25,3 +25,5 @@ go.work
 .idea
 node_modules/
 screenshots/
+chrome/
+firefox/

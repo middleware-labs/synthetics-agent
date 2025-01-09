@@ -49,9 +49,10 @@ import { CustomLogger } from "./CustomLogger.js";
   const browserArgs = generateBrowserArgs(cmdArgs);
 
   const decidedBrowser = cmdArgs.browser || "chrome";
+  
   const browser = await puppeteer.launch({
-    executablePath: BROWSER_EXECUTABLE_PATH_MAPPING[decidedBrowser],
-    headless: true,
+    browser: decidedBrowser,
+    headless: false,
     defaultViewport: null,
     acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
     args: browserArgs,
