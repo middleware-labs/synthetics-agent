@@ -56,6 +56,9 @@ import { CustomLogger } from "./CustomLogger.js";
     defaultViewport: null,
     acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
     args: browserArgs,
+    env: {
+      DISPLAY: ":10.0"
+    }
   });
 
   const page = await browser.newPage();
