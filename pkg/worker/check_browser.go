@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path"
@@ -70,12 +70,10 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 
 	nodeScript := fmt.Sprintf("%s/browser-tests/pup.js", currentDir)
 	recordingJson := fmt.Sprintf("%s/browser-tests/recordings/%s.json", currentDir, args.TestId)
-	fmt.Printf("Recording JSON: %s\n", recordingJson)
-	fmt.Printf("Recording Data: %s\n", checker.c.CheckTestRequest.Recording)
 	err := os.WriteFile(recordingJson, []byte(checker.c.CheckTestRequest.Recording), 0644)
 	if err != nil {
-		fmt.Printf("Error writing JSON to file: %v\n", err)
-		return testStatus{status: testStatusError, msg: "Error writing JSON to file"}, []string{}
+		slog.Error("Error writing recording for testID: %s to file: %v\n", args.TestId, slog.String("error", err.Error()))
+		return testStatus{status: testStatusError, msg: "Failed to run tests due to recording not created."}, []string{}
 	}
 
 	argsArray := []string{
@@ -164,11 +162,30 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 	if err := cmd.Run(); err != nil {
 		tStatus.msg = fmt.Sprintf("Failed to run browser test %v", err)
 		tStatus.status = testStatusError
-		log.Printf("Error running Node.js script for %s: %v\nOutput: %s", args.Browser, err, out.String())
+		slog.Error(fmt.Sprintf("Error running browser test script for testId: %s Args: [%s]: %s\tOutput: %s", args.TestId, strings.Join(argsArray, " "), err.Error(), out.String()))
 		return tStatus, []string{}
 	}
-	fmt.Println("test_report:", out.String())
+	var result map[string]interface{}
+	err = json.Unmarshal(out.Bytes(), &result)
+	if err != nil {
+		tStatus.msg = "Failed to generate result"
+		tStatus.status = testStatusError
+		slog.Error(fmt.Sprintf("Failed to generate result for testId %s", args.TestId))
+	}
 	checker.attrs.PutStr("test_report", out.String())
+	testResult, ok := result["result"].(map[string]interface{})
+	if ok {
+		if statusResult, ok := testResult["status"].(string); ok {
+			if statusResult == "FAILED" {
+				tStatus.status = testStatusFail
+				failureResult, ok := testResult["failure"].(map[string]interface{})
+				if ok {
+					tStatus.msg = failureResult["message"].(string)
+				}
+			}
+		}
+	}
+
 	return tStatus, screenshotUrls
 }
 
@@ -178,7 +195,7 @@ func (checker *browserChecker) uploadScreenshots(filePath string, testId string,
 
 		files, err := os.ReadDir(screenshotDir)
 		if err != nil {
-			log.Printf("Failed to read screenshot directory for test %s: %v", testId, err)
+			slog.Error("Failed to read screenshot directory for test %s: %v", testId, err)
 			return
 		}
 
@@ -194,12 +211,12 @@ func (checker *browserChecker) uploadScreenshots(filePath string, testId string,
 				fmt.Println("fileName", fileName)
 				screenshot, err := os.ReadFile(path.Join(screenshotDir, fileName))
 				if err != nil {
-					log.Printf("Failed to read video file: %v", err)
+					slog.Error("Failed to read screenshot file: %v for testId: %s", slog.String("error", err.Error()), slog.String("testId", testId))
 					return
 				}
 				err = checker.screenshotStorage.UploadPreSignedURL(screenshotsUrl[index], bytes.NewReader(screenshot), "image/png")
 				if err != nil {
-					log.Printf("Failed to upload screenshot %s: %v", fileName, err)
+					slog.Error("Failed to upload screenshot %s: %v for testId: ", fileName, slog.String("error", err.Error()), slog.String("testId", testId))
 				}
 			}(file.Name())
 		}

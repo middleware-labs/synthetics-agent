@@ -257,6 +257,7 @@ func (cs *CheckState) fire() error {
 					browserChecker.CmdArgs = commandArgs
 					testStatus := browserChecker.Check()
 					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
+					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)
 				}
 			}(browser)
 		}

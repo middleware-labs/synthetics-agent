@@ -36,7 +36,7 @@ func main() {
 			},
 			{
 				"type": "click",
-				"timestamp": 1736406960108,
+				"timestamp": 1736418041012,
 				"id": "",
 				"className": "mb-0",
 				"tagName": "H3",
@@ -54,14 +54,36 @@ func main() {
 						"text/Products"
 					]
 				],
-				"offsetX": 307,
-				"offsetY": 5,
-				"clickTime": "2025-01-09T07:16:00.106Z",
+				"offsetX": 509,
+				"offsetY": 18,
+				"clickTime": "2025-01-09T10:20:41.010Z",
 				"clickButton": 0
 			},
 			{
 				"type": "click",
-				"timestamp": 1736406966913,
+				"timestamp": 1736418043790,
+				"id": "",
+				"className": "{}",
+				"tagName": "svg",
+				"selectors": [
+					[
+						"#root > main > section > div > div:nth-of-type(2) > div > div > div > div > div:nth-of-type(4) > div:nth-of-type(2) > button > svg"
+					],
+					[
+						"xpath///*[@id=\"root\"]/main/section/div/div[2]/div/div/div/div/div[4]/div[2]/button/svg"
+					],
+					[
+						"pierce/#root > main > section > div > div:nth-of-type(2) > div > div > div > div > div:nth-of-type(4) > div:nth-of-type(2) > button > svg"
+					]
+				],
+				"offsetX": 11,
+				"offsetY": 11,
+				"clickTime": "2025-01-09T10:20:43.788Z",
+				"clickButton": 0
+			},
+			{
+				"type": "click",
+				"timestamp": 1736418046320,
 				"id": "",
 				"className": "form-control rounded",
 				"tagName": "INPUT",
@@ -76,14 +98,14 @@ func main() {
 						"pierce/#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
 					]
 				],
-				"offsetX": 225,
-				"offsetY": 19,
-				"clickTime": "2025-01-09T07:16:06.910Z",
+				"offsetX": 262,
+				"offsetY": 15,
+				"clickTime": "2025-01-09T10:20:46.318Z",
 				"clickButton": 0
 			},
 			{
 				"type": "change",
-				"timestamp": 1736406968536,
+				"timestamp": 1736418050874,
 				"id": "",
 				"className": "form-control rounded",
 				"tagName": "INPUT",
@@ -98,36 +120,61 @@ func main() {
 						"pierce/#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
 					]
 				],
-				"value": "hola"
+				"value": "hey there!!!"
 			},
 			{
 				"type": "click",
-				"timestamp": 1736406971547,
+				"timestamp": 1736418051254,
 				"id": "",
-				"className": "offcanvas-body",
-				"tagName": "DIV",
+				"className": "navbar navbar-expand-lg navbar-light navbar-default py-0 pb-lg-4",
+				"tagName": "NAV",
 				"selectors": [
 					[
-						"#navbar-default > div:nth-of-type(2)"
+						"aria/Offcanvas navbar large"
 					],
 					[
-						"xpath///*[@id=\"navbar-default\"]/div[2]"
+						"#root > div > nav"
 					],
 					[
-						"pierce/#navbar-default > div:nth-of-type(2)"
+						"xpath///*[@id=\"root\"]/div/nav"
+					],
+					[
+						"pierce/#root > div > nav"
 					],
 					[
 						"text/Pick LocationAll DepartmentsDairy, Bread & EggsSnacks & MunchiesFruits & VegetablesCold Drinks & JuicesBreakfast & Instant FoodBakery & BiscuitsChicken, Meat & FishAll DepartmentsDairy, Bread & EggsSnacks & MunchiesFruits & VegetablesCold Drinks & JuicesBreakfast & Instant FoodBakery & BiscuitsChicken, Meat & FishHomeHome 1Home 2Home 3Home 4Home 5ShopShop Grid - FilterShop Grid - 3 columnShop List - FilterShop - FilterShop WideShop SingleShop Single v2Shop WishlistShop CartShop CheckoutStoresStore ListStore GridStore SingleMega menuDairy, Bread & EggsButterMilk DrinksCurd & YogurtEggsBuns & BakeryCheeseCondensed MilkDairy ProductsBreakfast & Instant FoodBreakfast CerealNoodles, Pasta & SoupFrozen Veg SnacksFrozen Non-Veg SnacksVermicelliInstant MixesBatterFruit and JuicesCold Drinks & JuicesSoft DrinksFruit JuicesColdpressWater & Ice CubesSoda & MixersHealth DrinksHerbal DrinksMilk DrinksDont miss thisoffer today.Shop NowPagesBlogBlog SingleBlog CategoryAbout us404 ErrorContactAccountSign inSignupForgot PasswordMy AccountOrdersSettingsAddressPayment MethodNotificationDashboard"
 					]
 				],
-				"offsetX": 1001,
-				"offsetY": 7,
-				"clickTime": "2025-01-09T07:16:11.544Z",
+				"offsetX": 880,
+				"offsetY": 49,
+				"clickTime": "2025-01-09T10:20:51.251Z",
 				"clickButton": 0
 			},
 			{
 				"type": "click",
-				"timestamp": 1736406976094,
+				"timestamp": 1736418054439,
+				"id": "",
+				"className": "{}",
+				"tagName": "svg",
+				"selectors": [
+					[
+						"#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(4) > div > div:nth-of-type(3) > a > svg"
+					],
+					[
+						"xpath///*[@id=\"root\"]/div/div[2]/div/div/div[4]/div/div[3]/a/svg"
+					],
+					[
+						"pierce/#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(4) > div > div:nth-of-type(3) > a > svg"
+					]
+				],
+				"offsetX": 1,
+				"offsetY": 11,
+				"clickTime": "2025-01-09T10:20:54.435Z",
+				"clickButton": 0
+			},
+			{
+				"type": "click",
+				"timestamp": 1736418057376,
 				"id": "",
 				"className": "btn btn-primary",
 				"tagName": "BUTTON",
@@ -145,9 +192,9 @@ func main() {
 						"text/Checkout"
 					]
 				],
-				"offsetX": -413,
-				"offsetY": 26,
-				"clickTime": "2025-01-09T07:16:16.092Z",
+				"offsetX": -340,
+				"offsetY": 25,
+				"clickTime": "2025-01-09T10:20:57.374Z",
 				"clickButton": 0
 			}
 		]

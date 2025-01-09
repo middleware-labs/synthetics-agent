@@ -1,0 +1,538 @@
+{
+  "config": {
+    "region": "us-east-1,eu-west-1",
+    "device": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0"
+    }
+  },
+  "testId": "synthetic-check-uid-123-india-hash",
+  "steps": [
+    {
+      "type": "setViewport",
+      "width": 1444,
+      "height": 1080,
+      "deviceScaleFactor": 1,
+      "isMobile": false,
+      "hasTouch": false,
+      "isLandscape": false,
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-0.png?se=2025-02-08T08%3A47%3A45Z&sig=mWy35Mq7xxgShg4SOy11OOLXr9l6MtRPivTLYsa1iT4%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "setViewport undefined",
+        "duration": 127,
+        "startTime": 705.0891280006617,
+        "rumContext": {}
+      }
+    },
+    {
+      "type": "navigate",
+      "url": "https://demo2.mw.dev/",
+      "assertedEvents": [
+        {
+          "type": "navigation",
+          "url": "https://demo2.mw.dev/",
+          "title": ""
+        }
+      ],
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "resources": [
+          {
+            "name": "https://demo2.mw.dev/assets/libs/simplebar/dist/simplebar.min.css",
+            "initiatorType": "link",
+            "startTime": 831.2999999988824,
+            "responseEnd": 952.3999999985099,
+            "duration": 121.09999999962747,
+            "transferSize": 1264
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/slick-carousel/slick/slick.css",
+            "initiatorType": "link",
+            "startTime": 829.7999999988824,
+            "responseEnd": 960.0999999996275,
+            "duration": 130.30000000074506,
+            "transferSize": 915
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/feather-webfont/dist/feather-icons.css",
+            "initiatorType": "link",
+            "startTime": 831.0999999996275,
+            "responseEnd": 960.6999999992549,
+            "duration": 129.59999999962747,
+            "transferSize": 2713
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/slick-carousel/slick/slick-theme.css",
+            "initiatorType": "link",
+            "startTime": 830.3999999985099,
+            "responseEnd": 1056.5999999996275,
+            "duration": 226.2000000011176,
+            "transferSize": 1241
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/tiny-slider/dist/tiny-slider.css",
+            "initiatorType": "link",
+            "startTime": 830.6999999992549,
+            "responseEnd": 1059.0999999996275,
+            "duration": 228.40000000037253,
+            "transferSize": 1091
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/bootstrap-icons/font/bootstrap-icons.min.css",
+            "initiatorType": "link",
+            "startTime": 830.8999999985099,
+            "responseEnd": 1166.699999999255,
+            "duration": 335.80000000074506,
+            "transferSize": 14980
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/css/theme.css",
+            "initiatorType": "link",
+            "startTime": 831.5,
+            "responseEnd": 1666.5,
+            "duration": 835,
+            "transferSize": 65911
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/bootstrap/dist/js/bootstrap.bundle.min.js",
+            "initiatorType": "script",
+            "startTime": 832.1999999992549,
+            "responseEnd": 1822.5999999996275,
+            "duration": 990.4000000003725,
+            "transferSize": 25601
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/simplebar/dist/simplebar.min.js",
+            "initiatorType": "script",
+            "startTime": 832.3999999985099,
+            "responseEnd": 1922.199999999255,
+            "duration": 1089.800000000745,
+            "transferSize": 7849
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/main.js",
+            "initiatorType": "script",
+            "startTime": 832.7999999988824,
+            "responseEnd": 1924.8999999985099,
+            "duration": 1092.0999999996275,
+            "transferSize": 1727
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/vendors/countdown.js",
+            "initiatorType": "script",
+            "startTime": 833.1999999992549,
+            "responseEnd": 2183.5,
+            "duration": 1350.300000000745,
+            "transferSize": 654
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/vendors/jquery.min.js",
+            "initiatorType": "script",
+            "startTime": 833,
+            "responseEnd": 2183.199999999255,
+            "duration": 1350.199999999255,
+            "transferSize": 32595
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/slick-carousel/slick/slick.min.js",
+            "initiatorType": "script",
+            "startTime": 833.5,
+            "responseEnd": 2187.0999999996275,
+            "duration": 1353.5999999996275,
+            "transferSize": 11723
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/vendors/slick-slider.js",
+            "initiatorType": "script",
+            "startTime": 833.5999999996275,
+            "responseEnd": 2205.699999999255,
+            "duration": 1372.0999999996275,
+            "transferSize": 1053
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/vendors/tns-slider.js",
+            "initiatorType": "script",
+            "startTime": 834.0999999996275,
+            "responseEnd": 2295,
+            "duration": 1460.9000000003725,
+            "transferSize": 528
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/tiny-slider/dist/min/tiny-slider.js",
+            "initiatorType": "script",
+            "startTime": 833.8999999985099,
+            "responseEnd": 2291.7999999988824,
+            "duration": 1457.9000000003725,
+            "transferSize": 13700
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/js/vendors/zoom.js",
+            "initiatorType": "script",
+            "startTime": 834.2999999988824,
+            "responseEnd": 2295.5,
+            "duration": 1461.2000000011176,
+            "transferSize": 466
+          },
+          {
+            "name": "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap",
+            "initiatorType": "css",
+            "startTime": 1671.199999999255,
+            "responseEnd": 6940.5999999996275,
+            "duration": 5269.4000000003725,
+            "transferSize": 566
+          },
+          {
+            "name": "https://demo2.mw.dev/static/js/main.d9b17636.js",
+            "initiatorType": "script",
+            "startTime": 832,
+            "responseEnd": 7393.299999998882,
+            "duration": 6561.299999998882,
+            "transferSize": 62727
+          },
+          {
+            "name": "https://cdnjs.middleware.io/browser/libs/0.0.2/middleware-rum.min.js",
+            "initiatorType": "script",
+            "startTime": 831.6999999992549,
+            "responseEnd": 7787.39999999851,
+            "duration": 6955.699999999255,
+            "transferSize": 0
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/freshcart-logo.b61097c19a52173a553d95ba8d2d7e2b.svg",
+            "initiatorType": "img",
+            "startTime": 7876.39999999851,
+            "responseEnd": 7992.199999999255,
+            "duration": 115.80000000074506,
+            "transferSize": 8189
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/images/logo/freshcart-logo.svg",
+            "initiatorType": "img",
+            "startTime": 7876.5999999996275,
+            "responseEnd": 7997.199999999255,
+            "duration": 120.59999999962747,
+            "transferSize": 855
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/mastercard.2f85c47fea271eeec99838608ab0a97f.svg",
+            "initiatorType": "img",
+            "startTime": 7877.0999999996275,
+            "responseEnd": 7998.5999999996275,
+            "duration": 121.5,
+            "transferSize": 2373
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/paypal.1ee8e90779c122270194301256e2c789.svg",
+            "initiatorType": "img",
+            "startTime": 7877.199999999255,
+            "responseEnd": 7998.699999999255,
+            "duration": 121.5,
+            "transferSize": 1582
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/visa.67c72dccd00fe5eba7790269ce3536d4.svg",
+            "initiatorType": "img",
+            "startTime": 7877.299999998882,
+            "responseEnd": 8002.0999999996275,
+            "duration": 124.80000000074506,
+            "transferSize": 1130
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/googleplay-btn.1339418d80f0bd0bf755cf52017c044c.svg",
+            "initiatorType": "img",
+            "startTime": 7877.5,
+            "responseEnd": 8002.39999999851,
+            "duration": 124.89999999850988,
+            "transferSize": 2902
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/american-express.cfb9fa5f666f922106219a64b7b9f2f7.svg",
+            "initiatorType": "img",
+            "startTime": 7877,
+            "responseEnd": 8222.299999998882,
+            "duration": 345.2999999988824,
+            "transferSize": 2933
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/libs/feather-webfont/dist/feather-icons.woff?e0a20d6edb74f52c006bb300686580b0",
+            "initiatorType": "css",
+            "startTime": 7928.299999998882,
+            "responseEnd": 8221.099999999627,
+            "duration": 292.80000000074506,
+            "transferSize": 38060
+          },
+          {
+            "name": "https://demo2.mw.dev/assets/images/banner/menu-banner.jpg",
+            "initiatorType": "img",
+            "startTime": 7876.699999999255,
+            "responseEnd": 8254.799999998882,
+            "duration": 378.09999999962747,
+            "transferSize": 855
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/amazonpay.d8c0f351dfb84b9568378528eb9a8d58.svg",
+            "initiatorType": "img",
+            "startTime": 7876.89999999851,
+            "responseEnd": 8254.799999998882,
+            "duration": 377.90000000037253,
+            "transferSize": 2313
+          },
+          {
+            "name": "https://demo2.mw.dev/static/media/appstore-btn.1c7c005af3cfcf8f6fed8c6ec9e0a9ea.svg",
+            "initiatorType": "img",
+            "startTime": 7877.39999999851,
+            "responseEnd": 8282.099999999627,
+            "duration": 404.7000000011176,
+            "transferSize": 3494
+          }
+        ],
+        "webVitals": [
+          {
+            "cls": 0.052474391153267345,
+            "lcp": 0
+          }
+        ],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-1.png?se=2025-02-08T08%3A47%3A45Z&sig=Pybc2%2BsGUYm8ynzSM1fECZRZynu%2BnkLYQRf23%2Fg1NxU%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "navigate https://demo2.mw.dev/",
+        "duration": 8447,
+        "startTime": 839.7228560000658,
+        "rumContext": {}
+      },
+      "timeout": 60000
+    },
+    {
+      "type": "click",
+      "timestamp": 1736406960108,
+      "id": "",
+      "className": "mb-0",
+      "tagName": "H3",
+      "selectors": [
+        [
+          "#root > main > section > div > div > div > h3"
+        ],
+        [
+          "xpath///*[@id=\"root\"]/main/section/div/div/div/h3"
+        ],
+        [
+          "pierce/#root > main > section > div > div > div > h3"
+        ],
+        [
+          "text/Products"
+        ]
+      ],
+      "offsetX": 307,
+      "offsetY": 5,
+      "clickTime": "2025-01-09T07:16:00.106Z",
+      "clickButton": 0,
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "resources": [],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-2.png?se=2025-02-08T08%3A47%3A45Z&sig=66n5EloDpBfnk9z8QFlpQ0cMvcPety%2B1R6AgXQ%2Bf8eE%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "click undefined",
+        "duration": 191,
+        "startTime": 9290.690646000206,
+        "rumContext": {}
+      }
+    },
+    {
+      "type": "click",
+      "timestamp": 1736406966913,
+      "id": "",
+      "className": "form-control rounded",
+      "tagName": "INPUT",
+      "selectors": [
+        [
+          "#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
+        ],
+        [
+          "xpath///*[@id=\"root\"]/div/div[2]/div/div/div[2]/form/div/input"
+        ],
+        [
+          "pierce/#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
+        ]
+      ],
+      "offsetX": 225,
+      "offsetY": 19,
+      "clickTime": "2025-01-09T07:16:06.910Z",
+      "clickButton": 0,
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "resources": [
+          {
+            "name": "https://demo2.mw.dev/favicon.ico",
+            "initiatorType": "other",
+            "startTime": 8294.799999998882,
+            "responseEnd": 8732.39999999851,
+            "duration": 437.59999999962747,
+            "transferSize": 3968
+          },
+          {
+            "name": "https://demo2.mw.dev/manifest.json",
+            "initiatorType": "link",
+            "startTime": 8289.599999999627,
+            "responseEnd": 8841.699999999255,
+            "duration": 552.0999999996275,
+            "transferSize": 562
+          }
+        ],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-3.png?se=2025-02-08T08%3A47%3A45Z&sig=qOR%2Feg8dLaVTrfLBYZjNyC4JjwM4N7MLq67Z8t9ldm4%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "click undefined",
+        "duration": 272,
+        "startTime": 9484.08634099923,
+        "rumContext": {
+          "sessionId": "85e748fb90a4f22cf0bf120e2ea713af"
+        }
+      }
+    },
+    {
+      "type": "change",
+      "timestamp": 1736406968536,
+      "id": "",
+      "className": "form-control rounded",
+      "tagName": "INPUT",
+      "selectors": [
+        [
+          "#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
+        ],
+        [
+          "xpath///*[@id=\"root\"]/div/div[2]/div/div/div[2]/form/div/input"
+        ],
+        [
+          "pierce/#root > div > div:nth-of-type(2) > div > div > div:nth-of-type(2) > form > div > input"
+        ]
+      ],
+      "value": "hola",
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "resources": [],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-4.png?se=2025-02-08T08%3A47%3A45Z&sig=wAhty%2Fj%2BjWE05%2FLjyLRWKnzZFt4UjCpn02fVhE1zOcs%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "change hola",
+        "duration": 155,
+        "startTime": 9795.09346799925,
+        "rumContext": {
+          "sessionId": "85e748fb90a4f22cf0bf120e2ea713af"
+        }
+      }
+    },
+    {
+      "type": "click",
+      "timestamp": 1736406971547,
+      "id": "",
+      "className": "offcanvas-body",
+      "tagName": "DIV",
+      "selectors": [
+        [
+          "#navbar-default > div:nth-of-type(2)"
+        ],
+        [
+          "xpath///*[@id=\"navbar-default\"]/div[2]"
+        ],
+        [
+          "pierce/#navbar-default > div:nth-of-type(2)"
+        ],
+        [
+          "text/Pick LocationAll DepartmentsDairy, Bread & EggsSnacks & MunchiesFruits & VegetablesCold Drinks & JuicesBreakfast & Instant FoodBakery & BiscuitsChicken, Meat & FishAll DepartmentsDairy, Bread & EggsSnacks & MunchiesFruits & VegetablesCold Drinks & JuicesBreakfast & Instant FoodBakery & BiscuitsChicken, Meat & FishHomeHome 1Home 2Home 3Home 4Home 5ShopShop Grid - FilterShop Grid - 3 columnShop List - FilterShop - FilterShop WideShop SingleShop Single v2Shop WishlistShop CartShop CheckoutStoresStore ListStore GridStore SingleMega menuDairy, Bread & EggsButterMilk DrinksCurd & YogurtEggsBuns & BakeryCheeseCondensed MilkDairy ProductsBreakfast & Instant FoodBreakfast CerealNoodles, Pasta & SoupFrozen Veg SnacksFrozen Non-Veg SnacksVermicelliInstant MixesBatterFruit and JuicesCold Drinks & JuicesSoft DrinksFruit JuicesColdpressWater & Ice CubesSoda & MixersHealth DrinksHerbal DrinksMilk DrinksDont miss thisoffer today.Shop NowPagesBlogBlog SingleBlog CategoryAbout us404 ErrorContactAccountSign inSignupForgot PasswordMy AccountOrdersSettingsAddressPayment MethodNotificationDashboard"
+        ]
+      ],
+      "offsetX": 1001,
+      "offsetY": 7,
+      "clickTime": "2025-01-09T07:16:11.544Z",
+      "clickButton": 0,
+      "result": {
+        "status": "PASSED",
+        "jsErrors": [
+          "error"
+        ],
+        "jsWarn": [
+          "warn"
+        ],
+        "resources": [],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-5.png?se=2025-02-08T08%3A47%3A45Z&sig=4ygufo3SbMMiDCdx33DMhIVPT1aFfsQlDGeXqMnv8ns%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "click undefined",
+        "duration": 144,
+        "startTime": 9952.70660699904,
+        "rumContext": {
+          "sessionId": "85e748fb90a4f22cf0bf120e2ea713af"
+        }
+      }
+    },
+    {
+      "type": "click",
+      "timestamp": 1736406976094,
+      "id": "",
+      "className": "btn btn-primary",
+      "tagName": "BUTTON",
+      "selectors": [
+        [
+          "#offcanvasRight > div:nth-of-type(2) > div > div > button:nth-of-type(2)"
+        ],
+        [
+          "xpath///*[@id=\"offcanvasRight\"]/div[2]/div/div/button[2]"
+        ],
+        [
+          "pierce/#offcanvasRight > div:nth-of-type(2) > div > div > button:nth-of-type(2)"
+        ],
+        [
+          "text/Checkout"
+        ]
+      ],
+      "offsetX": -413,
+      "offsetY": 26,
+      "clickTime": "2025-01-09T07:16:16.092Z",
+      "clickButton": 0,
+      "result": {
+        "status": "FAILED",
+        "jsErrors": [],
+        "jsWarn": [],
+        "resources": [],
+        "webVitals": [],
+        "screenshotUrl": "https://mwbetaazureeastus.blob.core.windows.net/mwbetaazureeastus-app/browser-tests%2Fscreenshots%2Fsynthetic-check-uid-123-india-hash%2Fstep-6.png?se=2025-02-08T08%3A47%3A45Z&sig=pxg7CjTGxOktu%2BU5V5BgCMcIjfEJ7yoIMfukFy2%2BeHs%3D&sp=rw&sr=b&sv=2024-11-04",
+        "description": "click",
+        "duration": 0,
+        "startTime": 10103.860191000625,
+        "error": "Timed out after waiting 7000ms"
+      }
+    }
+  ],
+  "startTime": 704.5948249995708,
+  "duration": 16526,
+  "failure": {
+    "message": "Timed out after waiting 7000ms",
+    "code": "TimeoutError"
+  }
+}
