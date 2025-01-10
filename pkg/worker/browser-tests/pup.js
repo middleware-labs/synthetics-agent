@@ -4,14 +4,13 @@ import cookie from "cookie";
 import fs from "fs";
 import puppeteer from "puppeteer";
 import {
-  BROWSER_EXECUTABLE_PATH_MAPPING,
   DEVICE_VIEWPORT_MAPPING,
   FAILED,
-  SKIPPED,
+  SKIPPED
 } from "./constant.js";
+import { CustomLogger } from "./CustomLogger.js";
 import { Extension } from "./Extension.js";
 import { generateBrowserArgs, initOnDocumentLoadScript } from "./util.js";
-import { CustomLogger } from "./CustomLogger.js";
 
 (async function run() {
   const optionDefinitions = [
@@ -47,18 +46,13 @@ import { CustomLogger } from "./CustomLogger.js";
   logger.info(cmdArgs);
 
   const browserArgs = generateBrowserArgs(cmdArgs);
-
   const decidedBrowser = cmdArgs.browser || "chrome";
-  
-  const browser = await puppeteer.launch({
-    browser: decidedBrowser,
-    headless: false,
+  const launchArgs = JSON.stringify({ stealth: true, args: browserArgs });
+
+  const browser = await puppeteer.connect({
+    browserWSEndpoint: `ws://localhost:3000/?launch=${launchArgs}`,    
     defaultViewport: null,
     acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
-    args: browserArgs,
-    env: {
-      DISPLAY: ":10.0"
-    }
   });
 
   const page = await browser.newPage();

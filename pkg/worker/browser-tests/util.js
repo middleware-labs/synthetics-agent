@@ -86,7 +86,7 @@ export function initOnDocumentLoadScript(cmdArgs) {
 }
 
 export function generateBrowserArgs(cmdArgs) {
-  const browserArgs = ["--disable-dev-shm-usage", "--no-sandbox"];
+  const browserArgs = ["--disable-dev-shm-usage", "--no-sandbox", "--headless"];
   if (cmdArgs["proxy-server"]) {
     browserArgs.push(`--proxy-server=${cmdArgs["proxy-server"]}`);
   }
