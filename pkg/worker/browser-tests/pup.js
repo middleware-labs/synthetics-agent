@@ -50,7 +50,7 @@ import { generateBrowserArgs, initOnDocumentLoadScript } from "./util.js";
   const launchArgs = JSON.stringify({ stealth: true, args: browserArgs });
 
   const browser = await puppeteer.connect({
-    browserWSEndpoint: `ws://localhost:3000/?launch=${launchArgs}`,    
+    browserWSEndpoint: `ws://browserless-${decidedBrowser}.mw-backend:3000/?launch=${launchArgs}`,    
     defaultViewport: null,
     acceptInsecureCerts: cmdArgs["ignore-certificate-errors"] || false,
   });
