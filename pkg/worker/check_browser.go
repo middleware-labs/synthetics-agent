@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -63,84 +62,35 @@ func (checker *browserChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArgs) (testStatus, []string) {
+func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []string) {
 	tStatus := testStatus{
 		status: testStatusOK,
 	}
 
-	nodeScript := fmt.Sprintf("%s/browser-tests/pup.js", currentDir)
-	recordingJson := fmt.Sprintf("%s/browser-tests/recordings/%s.json", currentDir, args.TestId)
-	err := os.WriteFile(recordingJson, []byte(checker.c.CheckTestRequest.Recording), 0644)
-	if err != nil {
-		slog.Error("Error writing recording for testID: %s to file: %v\n", args.TestId, slog.String("error", err.Error()))
-		return testStatus{status: testStatusError, msg: "Failed to run tests due to recording not created."}, []string{}
+	cmdArgs := map[string]interface{}{
+		"browser":                  args.Browser,
+		"collectRum":               true,
+		"device":                   args.Device,
+		"region":                   args.Region,
+		"testId":                   args.TestId,
+		"recording":                checker.c.CheckTestRequest.Recording,
+		"screenshots":              checker.c.Request.TakeScreenshots,
+		"ignoreCertificateErrors":  checker.c.Request.HTTPPayload.IgnoreServerCertificateError,
+		"proxyServer":              checker.c.Request.HTTPPayload.Proxy.URL,
+		"timezone":                 checker.c.Request.Timezone,
+		"language":                 checker.c.Request.Language,
+		"username":                 checker.c.Request.HTTPPayload.Authentication.Basic.Username,
+		"password":                 checker.c.Request.HTTPPayload.Authentication.Basic.Password,
+		"cookies":                  checker.c.Request.HTTPPayload.Cookies,
+		"disableCors":              checker.c.Request.DisableCors,
+		"disableCsp":               checker.c.Request.DisableCSP,
+		"headers":                  checker.c.CheckTestRequest.Headers,
+		"waitTimeout":              checker.c.CheckTestRequest.Timeout,
+		"sslCertificatePrivateKey": checker.c.Request.SslCertificatePrivateKey,
+		"sslCertificate":           checker.c.Request.SslCertificate,
 	}
 
-	argsArray := []string{
-		nodeScript,
-		"--browser", args.Browser,
-		"--collectRum",
-		"--device", args.Device,
-		"--region", args.Region,
-		"--testId", args.TestId,
-		"--recording", recordingJson,
-	}
-
-	if !checker.c.Request.TakeScreenshots {
-		argsArray = append(argsArray, "--no-screenshots")
-	}
-	if checker.c.Request.HTTPPayload.IgnoreServerCertificateError {
-		argsArray = append(argsArray, "--ignore-certificate-errors")
-	}
-	if checker.c.Request.HTTPPayload.Proxy.URL != "" {
-		argsArray = append(argsArray, "--proxy-server")
-		argsArray = append(argsArray, checker.c.Request.HTTPPayload.Proxy.URL)
-	}
-
-	if checker.c.Request.Timezone != "" {
-		argsArray = append(argsArray, "--timezone", checker.c.Request.Timezone)
-	}
-
-	if checker.c.Request.Language != "" {
-		argsArray = append(argsArray, "--language", checker.c.Request.Language)
-	}
-
-	if checker.c.Request.HTTPPayload.Authentication.Basic.Username != "" && checker.c.Request.HTTPPayload.Authentication.Basic.Password != "" {
-		argsArray = append(argsArray, "--username", checker.c.Request.HTTPPayload.Authentication.Basic.Username, "--password", checker.c.Request.HTTPPayload.Authentication.Basic.Password)
-	}
-	if checker.c.Request.HTTPPayload.Cookies != "" {
-		argsArray = append(argsArray, "--cookies", checker.c.Request.HTTPPayload.Cookies)
-	}
-
-	if checker.c.Request.DisableCors {
-		argsArray = append(argsArray, "--disableCors")
-	}
-
-	if checker.c.Request.DisableCSP {
-		argsArray = append(argsArray, "--disableCsp")
-	}
-
-	if len(checker.c.CheckTestRequest.Headers) > 0 {
-		jsonString, err := json.Marshal(checker.c.CheckTestRequest.Headers)
-		fmt.Println(string(jsonString))
-		if err == nil {
-			argsArray = append(argsArray, "--headers")
-			argsArray = append(argsArray, string(jsonString))
-		}
-	}
-
-	if checker.c.CheckTestRequest.Timeout != 0 {
-		argsArray = append(argsArray, "--waitTimeout", strconv.Itoa(checker.c.CheckTestRequest.Timeout))
-	}
-
-	if checker.c.Request.SslCertificatePrivateKey != "" {
-		argsArray = append(argsArray, "--sslCertificatePrivateKey", checker.c.Request.SslCertificatePrivateKey)
-	}
-
-	if checker.c.Request.SslCertificate != "" {
-		argsArray = append(argsArray, "--sslCertificate", checker.c.Request.SslCertificate)
-	}
-
+	// Handle screenshot URLs
 	screenshotUrls := []string{}
 	if checker.c.CheckTestRequest.StepsCount != 0 && checker.c.Request.TakeScreenshots {
 		for steps := 0; steps < checker.c.CheckTestRequest.StepsCount; steps++ {
@@ -150,29 +100,55 @@ func (checker *browserChecker) runBrowserTest(currentDir string, args CommandArg
 				screenshotUrls = append(screenshotUrls, screenshotUrl)
 			}
 		}
-		argsArray = append(argsArray, "--screenshotsUrl", strings.Join(screenshotUrls, ","))
+		cmdArgs["screenshotsUrl"] = screenshotUrls
 	}
 
-	fmt.Println("node", argsArray)
-	cmd := exec.Command("node", argsArray...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
+	payload := map[string]interface{}{
+		"args": cmdArgs,
+	}
 
-	if err := cmd.Run(); err != nil {
-		tStatus.msg = fmt.Sprintf("Failed to run browser test %v", err)
+	url := os.Getenv("BROWSER_HUB_URL")
+	if url == "" {
 		tStatus.status = testStatusError
-		slog.Error(fmt.Sprintf("Error running browser test script for testId: %s Args: [%s]: %s\tOutput: %s", args.TestId, strings.Join(argsArray, " "), err.Error(), out.String()))
+		tStatus.msg = "BROWSER_HUB_URL environment variable not set"
 		return tStatus, []string{}
 	}
-	var result map[string]interface{}
-	err = json.Unmarshal(out.Bytes(), &result)
+
+	// Make the HTTP POST request
+	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		tStatus.msg = "Failed to generate result"
 		tStatus.status = testStatusError
-		slog.Error(fmt.Sprintf("Failed to generate result for testId %s", args.TestId))
+		tStatus.msg = "Failed to marshal payload"
+		return tStatus, []string{}
 	}
-	checker.attrs.PutStr("test_report", out.String())
+
+	resp, err := http.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		tStatus.status = testStatusError
+		tStatus.msg = fmt.Sprintf("HTTP request failed: %v", err)
+		fmt.Println(err.Error())
+		return tStatus, []string{}
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		tStatus.status = testStatusError
+		tStatus.msg = "Failed to read response body"
+		return tStatus, []string{}
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		tStatus.msg = "Failed to parse result"
+		tStatus.status = testStatusError
+		return tStatus, []string{}
+	}
+	fmt.Println(string(body))
+	checker.attrs.PutStr("test_report", string(body))
+
+	// Process the response status
 	testResult, ok := result["result"].(map[string]interface{})
 	if ok {
 		if statusResult, ok := testResult["status"].(string); ok {
@@ -228,7 +204,7 @@ func (checker *browserChecker) Check() testStatus {
 	args := checker.CmdArgs
 	_, filePath, _, _ := runtime.Caller(0)
 	currentDir := filepath.Dir(filePath)
-	testStatus, screenshotsUrl := checker.runBrowserTest(currentDir, args)
+	testStatus, screenshotsUrl := checker.runBrowserTest(args)
 	checker.uploadScreenshots(currentDir, args.TestId, screenshotsUrl)
 	return testStatus
 }
