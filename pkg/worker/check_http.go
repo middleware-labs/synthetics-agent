@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net/http"
 	"net/http/httptrace"
@@ -416,7 +415,6 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 }
 
 func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
-	slog.Info("here")
 	c := checker.c
 	start := time.Now()
 
@@ -476,7 +474,6 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	}
 
 	checker.testBody["headers"] = hdr
-
 
 	checker.attrs.PutStr("check.details.body_size",
 		fmt.Sprintf("%d KB\n", len(bs)/1024))
