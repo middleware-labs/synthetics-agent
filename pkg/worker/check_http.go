@@ -481,14 +481,11 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	bss := string(bs)
 	contentType := hdr["Content-Type"]
-	if !c.Request.HTTPPayload.Privacy.SaveBodyResponse {
-		if (strings.Contains(contentType, "application/json")) {
-		 	checker.attrs.PutStr("check.details.body_raw", bss)
-		}
-	}
-
 	if (strings.Contains(contentType, "application/json")) {
 		checker.testBody["body"] = bss
+		if !c.Request.HTTPPayload.Privacy.SaveBodyResponse {
+			checker.attrs.PutStr("check.details.body_raw", bss)
+		}
 	}
 
 	var checkHttp200 = true
