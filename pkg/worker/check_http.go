@@ -461,16 +461,10 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	js, _ := json.Marshal(checker.timestamps)
 	checker.attrs.PutStr("checkpoints", string(js))
-	bss := string(bs)
-	// todo: tmp disabled reason: memory full on large responses
-	//if c.Request.HTTPPayload.Privacy.SaveBodyResponse {
-	//	attrs.PutStr("check.response.body", bss)
-	//}
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	checker.testBody["tookMs"] = fmt.Sprintf("%v ms", checker.timers["duration"])
-	checker.testBody["body"] = bss
 	checker.testBody["statusCode"] = resp.StatusCode
 
 	hdr := make(map[string]string)
@@ -484,6 +478,15 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	checker.attrs.PutStr("check.details.body_size",
 		fmt.Sprintf("%d KB\n", len(bs)/1024))
 	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
+
+	contentType := hdr["Content-Type"]
+	if (strings.Contains(contentType, "application/json")) {
+		bss := string(bs)
+		checker.testBody["body"] = bss
+		if !c.Request.HTTPPayload.Privacy.SaveBodyResponse {
+			checker.attrs.PutStr("check.details.body_raw", bss)
+		}
+	}
 
 	var checkHttp200 = true
 	testStatusMsg := make([]string, 0)
