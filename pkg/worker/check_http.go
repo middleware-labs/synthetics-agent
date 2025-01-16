@@ -480,8 +480,8 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
 
 	contentType := hdr["Content-Type"]
-	if (strings.Contains(contentType, "application/json")) {
-		bss := string(bs)
+	bss := string(bs)
+	if strings.Contains(contentType, "application/json") {
 		checker.testBody["body"] = bss
 		if !c.Request.HTTPPayload.Privacy.SaveBodyResponse {
 			checker.attrs.PutStr("check.details.body_raw", bss)
