@@ -305,7 +305,22 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMs
 		status: testStatusOK,
 	}
 
-	if !assertString(body, assert) {
+	// TODO: move this to top level func
+	var dataMap map[string]interface{}
+	json.Unmarshal([]byte(body), &dataMap)
+	normalizedData, _ := json.Marshal(dataMap)
+
+	// Normalize the assert.Config.Value as well
+	var assertMap map[string]interface{}
+	json.Unmarshal([]byte(assert.Config.Value), &assertMap)
+	normalizedAssertValue, _ := json.Marshal(assertMap)
+
+	// Convert the byte arrays back to strings
+	normalizedDataStr := string(normalizedData)
+	normalizedAssertValueStr := string(normalizedAssertValue)
+	assert.Config.Value = normalizedAssertValueStr
+
+	if !assertString(normalizedDataStr, assert) {
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, body))
 
@@ -475,6 +490,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	checker.testBody["headers"] = hdr
 
+	// TODO: here we can see body_size, need to check why it is not going forward
 	checker.attrs.PutStr("check.details.body_size",
 		fmt.Sprintf("%d KB\n", len(bs)/1024))
 	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
