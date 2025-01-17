@@ -476,8 +476,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	checker.testBody["headers"] = hdr
 
 	checker.attrs.PutStr("check.details.body_size",
-		fmt.Sprintf("%d KB\n", len(bs)/1024))
-	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
+		fmt.Sprintf("%.4f KB\n", float64(len(bs))/1024.0))
 
 	contentType := hdr["Content-Type"]
 	bss := string(bs)
@@ -491,6 +490,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	var checkHttp200 = true
 	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
+		assert.Config.Value = strings.TrimSpace(assert.Config.Value)
 		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
