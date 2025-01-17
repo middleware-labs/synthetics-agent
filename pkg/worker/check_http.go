@@ -490,6 +490,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	var checkHttp200 = true
 	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
+		assert.Config.Value = strings.TrimSpace(assert.Config.Value)
 		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
