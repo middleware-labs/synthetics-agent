@@ -252,9 +252,10 @@ func (cs *CheckState) fire() error {
 						CollectRum: true,
 						Device:     device,
 						Region:     c.Locations,
-						TestId:     fmt.Sprintf("%s-%s-%s", string(c.Uid), "india", string(rune(time.Now().UnixNano()))),
+						TestId:     fmt.Sprintf("%s-%s-%d-%s-%s", string(c.Uid), cs.location, time.Now().Unix(), browser, device),
 					}
 					browserChecker.CmdArgs = commandArgs
+					slog.Info("Test started. TestID: %s", slog.String("testId", commandArgs.TestId), browser, device)
 					testStatus := browserChecker.Check()
 					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
 					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)

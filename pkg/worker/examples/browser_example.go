@@ -231,9 +231,9 @@ func main() {
 					"User-Agent": "Synthetic-Browser-Test-Agent",
 				},
 				Browsers: map[string][]string{
-					// "chrome":  {"laptop", "mobile", "tablet"},
+					"chrome": {"laptop", "mobile", "tablet"},
 					// "firefox": {"laptop"},
-					"edge": {"laptop"},
+					// "edge": {"laptop"},
 				},
 				Recording:  json.RawMessage(recordingData),
 				StepsCount: 10,
@@ -251,7 +251,7 @@ func main() {
 			defer wg.Done()
 			for _, device := range devices {
 				commandArgs := worker.CommandArgs{
-					Browser:    browser,
+				 	Browser:    browser,
 					CollectRum: true,
 					Device:     device,
 					Region:     syntheticCheck.Locations,

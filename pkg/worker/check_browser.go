@@ -5,27 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
-	"path"
-	"path/filepath"
-	"runtime"
-	"sync"
 	"time"
 
-	"github.com/middleware-labs/synthetics-agent/pkg/worker/objectstorage"
-	"github.com/middleware-labs/synthetics-agent/pkg/worker/objectstorage/azure"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 type browserChecker struct {
-	c                 SyntheticCheck
-	screenshotStorage objectstorage.ObjectStorage
-	testBody          map[string]interface{}
-	timers            map[string]float64
-	attrs             pcommon.Map
-	CmdArgs           CommandArgs
+	c        SyntheticCheck
+	testBody map[string]interface{}
+	timers   map[string]float64
+	attrs    pcommon.Map
+	CmdArgs  CommandArgs
 }
 
 // getTimers implements protocolChecker.
@@ -42,19 +34,11 @@ type CommandArgs struct {
 }
 
 func NewBrowserChecker(c SyntheticCheck) *browserChecker {
-	screenshotStorage, _ := azure.NewAzure(&objectstorage.StorageConfig{
-		CLOUD_STORAGE_TYPE:          os.Getenv("CLOUD_STORAGE_TYPE"),
-		CLOUD_STORAGE_BUCKET_URL:    os.Getenv("CLOUD_STORAGE_BUCKET_URL"),
-		CLOUD_STORAGE_BUCKET:        os.Getenv("CLOUD_STORAGE_BUCKET"),
-		CLOUD_STORAGE_CLIENT_ID:     os.Getenv("CLOUD_STORAGE_CLIENT_ID"),
-		CLOUD_STORAGE_CLIENT_SECRET: os.Getenv("CLOUD_STORAGE_CLIENT_SECRET"),
-	})
 	return &browserChecker{
-		c:                 c,
-		screenshotStorage: screenshotStorage,
-		testBody:          make(map[string]interface{}),
-		timers:            make(map[string]float64),
-		attrs:             pcommon.NewMap(),
+		c:        c,
+		testBody: make(map[string]interface{}),
+		timers:   make(map[string]float64),
+		attrs:    pcommon.NewMap(),
 	}
 }
 
@@ -62,10 +46,22 @@ func (checker *browserChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []string) {
+func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
+	start := time.Now()
+
 	tStatus := testStatus{
 		status: testStatusOK,
 	}
+	checker.attrs.PutStr("check.test_id", args.TestId)
+	checker.attrs.PutInt("check.created_at", start.Unix())
+	checker.attrs.PutStr("check.device.browser.type", args.Browser)
+	checker.attrs.PutInt("check.run_type", 0)
+	checker.attrs.PutStr("check.type", "browser")
+	checker.attrs.PutStr("check.device.id", args.Device)
+	checker.attrs.PutInt("check.steps.total", int64(checker.c.CheckTestRequest.StepsCount))
+	checker.attrs.PutInt("check.steps.completed", 0)
+	checker.attrs.PutInt("check.steps.errors", 0)
+	checker.attrs.PutInt("check.test_duration", 0)
 
 	cmdArgs := map[string]interface{}{
 		"browser":                  args.Browser,
@@ -88,19 +84,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 		"waitTimeout":              checker.c.CheckTestRequest.Timeout,
 		"sslCertificatePrivateKey": checker.c.Request.SslCertificatePrivateKey,
 		"sslCertificate":           checker.c.Request.SslCertificate,
-	}
-
-	// Handle screenshot URLs
-	screenshotUrls := []string{}
-	if checker.c.CheckTestRequest.StepsCount != 0 && checker.c.Request.TakeScreenshots {
-		for steps := 0; steps < checker.c.CheckTestRequest.StepsCount; steps++ {
-			screenshotPath := path.Join("browser-tests", "screenshots", args.TestId, fmt.Sprintf("step-%d.png", steps))
-			screenshotUrl, err := checker.screenshotStorage.GetPreSignedUploadUrl(screenshotPath, 30*24*time.Hour)
-			if err == nil && screenshotUrl != "" {
-				screenshotUrls = append(screenshotUrls, screenshotUrl)
-			}
-		}
-		cmdArgs["screenshotsUrl"] = screenshotUrls
+		"stepsCount":               checker.c.CheckTestRequest.StepsCount,
 	}
 
 	payload := map[string]interface{}{
@@ -111,7 +95,8 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 	if url == "" {
 		tStatus.status = testStatusError
 		tStatus.msg = "BROWSER_HUB_URL environment variable not set"
-		return tStatus, []string{}
+		checker.timers["browser"] = timeInMs(time.Since(start))
+		return tStatus
 	}
 
 	// Make the HTTP POST request
@@ -119,15 +104,16 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 	if err != nil {
 		tStatus.status = testStatusError
 		tStatus.msg = "Failed to marshal payload"
-		return tStatus, []string{}
+		checker.timers["browser"] = timeInMs(time.Since(start))
+		return tStatus
 	}
 
 	resp, err := http.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		tStatus.status = testStatusError
 		tStatus.msg = fmt.Sprintf("HTTP request failed: %v", err)
-		fmt.Println(err.Error())
-		return tStatus, []string{}
+		checker.timers["browser"] = timeInMs(time.Since(start))
+		return tStatus
 	}
 	defer resp.Body.Close()
 
@@ -135,7 +121,8 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 	if err != nil {
 		tStatus.status = testStatusError
 		tStatus.msg = "Failed to read response body"
-		return tStatus, []string{}
+		checker.timers["browser"] = timeInMs(time.Since(start))
+		return tStatus
 	}
 
 	var result map[string]interface{}
@@ -143,14 +130,32 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 	if err != nil {
 		tStatus.msg = "Failed to parse result"
 		tStatus.status = testStatusError
-		return tStatus, []string{}
+		checker.timers["browser"] = timeInMs(time.Since(start))
+		return tStatus
 	}
-	fmt.Println(string(body))
-	checker.attrs.PutStr("test_report", string(body))
+	checker.attrs.PutStr("check.test_report", string(body))
+	//TODO: verify what all attributes to be sent to clickhouse
 
 	// Process the response status
 	testResult, ok := result["result"].(map[string]interface{})
 	if ok {
+		if configResult, ok := testResult["config"].(map[string]interface{}); ok {
+			if deviceResult, ok := configResult["device"].(map[string]interface{}); ok {
+				if browserResult, ok := deviceResult["browser"].(map[string]interface{}); ok {
+					checker.attrs.PutStr("check.device.browser.user_agent", browserResult["user_agent"].(string))
+				}
+				if resolutionResult, ok := deviceResult["resolution"].(map[string]interface{}); ok {
+					checker.attrs.PutInt("check.device.resolution.width", int64(resolutionResult["width"].(float64)))
+					checker.attrs.PutInt("check.device.resolution.height", int64(resolutionResult["height"].(float64)))
+					checker.attrs.PutBool("check.device.resolution.isMobile", resolutionResult["isMobile"].(bool))
+				}
+			}
+		}
+		checker.attrs.PutInt("check.timeToInteractive", int64(testResult["timeToInteractive"].(float64)))
+		if testSummary, ok := testResult["test_summary"].(map[string]interface{}); ok {
+			checker.attrs.PutInt("check.steps.completed", int64(testSummary["completed"].(float64)))
+			checker.attrs.PutInt("check.steps.errors", int64(testSummary["errors"].(float64)))
+		}
 		if statusResult, ok := testResult["status"].(string); ok {
 			if statusResult == "FAILED" {
 				tStatus.status = testStatusFail
@@ -162,49 +167,13 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) (testStatus, []s
 		}
 	}
 
-	return tStatus, screenshotUrls
-}
-
-func (checker *browserChecker) uploadScreenshots(filePath string, testId string, screenshotsUrl []string) {
-	if len(screenshotsUrl) > 0 {
-		screenshotDir := path.Join(filePath, "browser-tests", "screenshots", testId)
-
-		files, err := os.ReadDir(screenshotDir)
-		if err != nil {
-			slog.Error("Failed to read screenshot directory for test %s: %v", testId, err)
-			return
-		}
-
-		var wg sync.WaitGroup
-		for index, file := range files {
-			if file.IsDir() {
-				continue
-			}
-
-			wg.Add(1)
-			go func(fileName string) {
-				defer wg.Done()
-				fmt.Println("fileName", fileName)
-				screenshot, err := os.ReadFile(path.Join(screenshotDir, fileName))
-				if err != nil {
-					slog.Error("Failed to read screenshot file: %v for testId: %s", slog.String("error", err.Error()), slog.String("testId", testId))
-					return
-				}
-				err = checker.screenshotStorage.UploadPreSignedURL(screenshotsUrl[index], bytes.NewReader(screenshot), "image/png")
-				if err != nil {
-					slog.Error("Failed to upload screenshot %s: %v for testId: ", fileName, slog.String("error", err.Error()), slog.String("testId", testId))
-				}
-			}(file.Name())
-		}
-		wg.Wait()
-	}
+	checker.attrs.PutInt("check.test_duration", int64(result["test_duration"].(float64)))
+	checker.timers["browser"] = timeInMs(time.Since(start))
+	return tStatus
 }
 
 func (checker *browserChecker) Check() testStatus {
 	args := checker.CmdArgs
-	_, filePath, _, _ := runtime.Caller(0)
-	currentDir := filepath.Dir(filePath)
-	testStatus, screenshotsUrl := checker.runBrowserTest(args)
-	checker.uploadScreenshots(currentDir, args.TestId, screenshotsUrl)
+	testStatus := checker.runBrowserTest(args)
 	return testStatus
 }
