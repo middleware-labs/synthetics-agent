@@ -261,9 +261,8 @@ func (cs *CheckState) fire() error {
 					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)
 				}
 			}(browser)
+			wg.Wait()
 		}
-
-		wg.Wait()
 	} else {
 		protocolChecker, err := getProtocolChecker(c)
 		if err != nil {
