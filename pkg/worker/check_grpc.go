@@ -28,12 +28,17 @@ const (
 
 func (checker *grpcChecker) processGRPCError(testStatus testStatus, c SyntheticCheck) {
 	for _, a := range c.Request.Assertions.GRPC.Cases {
-		checker.assertions = append(checker.assertions, map[string]string{
-			"status": testStatusFail,
-			"reason": fmt.Sprintf("should be %s %v", strings.ReplaceAll(a.Config.Operator, "_", " "), a.Config.Value),
-			"actual": "N/A",
-			"type":   a.Type,
-		})
+		ck := AssertResult{
+			Status: testStatusFail,
+			Actual: "N/A",
+			Type:   a.Type,
+			Reason: AssertObj{
+				Verb:     "should be",
+				Operator: strings.ReplaceAll(a.Config.Operator, "_", " "),
+				Value:    a.Config.Value,
+			},
+		}
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 
 	resultStr, _ := json.Marshal(checker.assertions)
@@ -72,45 +77,49 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	testStatusMsg := make([]string, 0)
 
 	for _, assert := range c.Request.Assertions.GRPC.Cases {
-		ck := map[string]string{
-			"type":   assert.Type,
-			"status": testStatusOK,
-			"reason": fmt.Sprintf("should be %s %v", strings.ReplaceAll(assert.Config.Operator, "_", " "), assert.Config.Value),
-			"actual": "N/A",
+		ck := AssertResult{
+			Status: testStatusOK,
+			Actual: "N/A",
+			Type:   assert.Type,
+			Reason: AssertObj{
+				Verb:     "should be",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value,
+			},
 		}
 
 		switch assert.Type {
 		case string(grpcResponseTime):
-			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
+			ck.Actual = fmt.Sprintf("%v", checker.timers["duration"])
 			if !assertFloat(checker.timers["duration"], assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
-			checker.assertions = append(checker.assertions, ck)
+			checker.assertions = append(checker.assertions, ck.ToMap())
 
 		case string(grpcResponse):
-			ck["actual"] = checker.respStr
+			ck.Actual = checker.respStr
 			if !assertString(checker.respStr, assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.respStr))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
-			checker.assertions = append(checker.assertions, ck)
+			checker.assertions = append(checker.assertions, ck.ToMap())
 
 		case string(grpcMetadata):
 			actual := strings.Join(checker.respTrailers.Get(assert.Config.Target), "\n")
-			ck["actual"] = actual
+			ck.Actual = actual
 			if !assertString(actual, assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, actual))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
-			checker.assertions = append(checker.assertions, ck)
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 	}
 
@@ -118,6 +127,7 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	checker.attrs.PutStr("assertions", string(resultStr))
 	return testStatus
 }
+
 func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 	cnts := time.Now()
 	newMD := metadata.MD{}
@@ -157,6 +167,7 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 		status: testStatusOK,
 	}
 }
+
 func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 	var (
 		refClient   *grpcreflect.Client
@@ -220,8 +231,8 @@ func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.Cl
 		status: testStatusOK,
 	}
 }
-func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 
+func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 	var (
 		descSource  grpccheckerhelper.DescriptorSource
 		refClient   *grpcreflect.Client
@@ -349,6 +360,7 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 		status: testStatusOK,
 	}
 }
+
 func (checker *grpcChecker) check() testStatus {
 	c := checker.c
 	ctx, cnlFnc := context.WithCancel(context.Background())
@@ -461,5 +473,4 @@ func strSensitise(s string) string {
 		s = strings.ReplaceAll(s, " ", "")
 	}
 	return s
-
 }

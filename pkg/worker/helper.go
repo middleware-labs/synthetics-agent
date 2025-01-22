@@ -2,8 +2,10 @@
 package worker
 
 import (
-	"time"
+	"encoding/json"
 	"fmt"
+	"regexp"
+	"time"
 )
 
 type SyntheticsModel struct {
@@ -278,6 +280,37 @@ type MonitorOptions struct {
 	TriggerFailsCaseCount   int           `json:"trigger_fails_case_count"`
 }
 
+type AssertObj struct {
+	Verb    string `json:"verb"`
+	Operator string `json:"operator"`
+	Value string `json:"value"`
+}
+
+type AssertResult struct {
+	Type   string `json:"type"`
+	Status string `json:"status"`
+	Actual string `json:"actual"`
+	Reason AssertObj `json:"reason"`
+}
+
+// ToMap to convert AssertResult to a map[string]string
+func (a AssertResult) ToMap() (map[string]string) {
+	str, err := json.Marshal(a.Reason)
+	if err != nil {
+		return map[string]string{
+			"type":   a.Type,
+			"status": a.Status,
+			"actual": a.Actual,
+		}
+	}
+    return map[string]string{
+        "type":   a.Type,
+        "status": a.Status,
+        "actual": a.Actual,
+        "reason": string(str),
+    }
+}
+
 func timeInMs(t time.Duration) float64 {
 	return float64(t) / float64(time.Millisecond)
 }
@@ -302,4 +335,10 @@ func formatSerialNumber(serialNumber []byte) string {
 		formatted += fmt.Sprintf("%02X", v)
 	}
 	return formatted
+}
+
+// normalizeJSON remove spaces and newlines to standardize the JSON data for comparison
+func normalizeJSON(jsonStr string) string {
+	re := regexp.MustCompile(`\s+`)
+	return re.ReplaceAllString(jsonStr, "")
 }

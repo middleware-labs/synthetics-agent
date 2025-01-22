@@ -220,16 +220,22 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 
 	ctx := context.Background()
 	for _, assert := range c.Request.Assertions.DNS.Cases {
-		ck := make(map[string]string)
+		ck := AssertResult{}
 		switch assert.Type {
 		case assertTypeDNSResponseTime:
-			ck["type"] = assert.Type
-			ck["status"] = testStatusOK
-			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
-			ck["reason"] = "response time assertion passed"
+			ck.Type = assert.Type
+			ck.Status = testStatusOK
+			ck.Actual = fmt.Sprintf("%v", checker.timers["duration"])
+			ck.Reason = AssertObj{
+				Verb: "response time assertion passed",
+			}
 			if !assertFloat(checker.timers["duration"], assert) {
-				ck["status"] = testStatusFail
-				ck["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
+				ck.Status = testStatusFail
+				ck.Reason = AssertObj{
+					Verb:     "should be",
+					Operator: assert.Config.Operator,
+					Value:    assert.Config.Value,
+				}
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -240,9 +246,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 		case assertTypeDNSAtLeastOneRecord:
 			records := make([]string, 0)
 
-			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ") +
+			ck.Type = strings.ReplaceAll(assert.Type, "_", " ") +
 				" " + strings.ReplaceAll(assert.Config.Target, "_", " ")
-			ck["status"] = testStatusOK
+			ck.Status = testStatusOK
 
 			switch assert.Config.Target {
 			case "of_type_a":
@@ -260,9 +266,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			case "of_type_cname":
 				cnames, _, err := lookupCNAME(ctx, c.Endpoint, checker.resolver)
 				if err != nil {
-					ck["reason"] = "Error while looking up CNAME record"
-					ck["status"] = testStatusFail
-					ck["actual"] = fmt.Sprintf("%v", err)
+					ck.Status = testStatusFail
+					ck.Actual = fmt.Sprintf("%v", err)
+					ck.Reason = AssertObj{
+						Verb: "Error while looking up CNAME record",
+					}
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up CNAME record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -272,9 +280,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			case "of_type_mx":
 				mxHosts, _, err := lookupMX(ctx, c.Endpoint, checker.resolver)
 				if err != nil {
-					ck["reason"] = "Error while resolving MX record"
-					ck["status"] = testStatusFail
-					ck["actual"] = fmt.Sprintf("%v", err)
+					ck.Status = testStatusFail
+					ck.Actual = fmt.Sprintf("%v", err)
+					ck.Reason = AssertObj{
+						Verb: "Error while resolving MX record",
+					}
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while resolving MX record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -284,9 +294,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			case "of_type_ns":
 				nsHosts, _, err := lookupNS(ctx, c.Endpoint, checker.resolver)
 				if err != nil {
-					ck["reason"] = "Error while looking up NS record"
-					ck["status"] = testStatusFail
-					ck["actual"] = fmt.Sprintf("%v", err)
+					ck.Status = testStatusFail
+					ck.Actual = fmt.Sprintf("%v", err)
+					ck.Reason = AssertObj{
+						Verb: "Error while looking up NS record",
+					}
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up NS record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -296,9 +308,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			case "of_type_txt":
 				txtHosts, _, err := lookupTXT(ctx, c.Endpoint, checker.resolver)
 				if err != nil {
-					ck["status"] = testStatusFail
-					ck["reason"] = "Error while looking up TXT record"
-					ck["actual"] = fmt.Sprintf("%v", err)
+					ck.Status = testStatusFail
+					ck.Actual = fmt.Sprintf("%v", err)
+					ck.Reason = AssertObj{
+						Verb: "Error while looking up TXT record",
+					}
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up TXT record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
 					testStatus.status = testStatusError
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -325,17 +339,20 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					match = true
 				}
 
-				if ck["actual"] == "" {
-					ck["actual"] = strings.Join(records, ",")
+				if ck.Actual == "" {
+					ck.Actual = strings.Join(records, ",")
 				}
 
 				if pass {
-					ck["status"] = testStatusOK
-					ck["actual"] = strings.Join(records, ",")
+					ck.Status = testStatusOK
+					ck.Actual = strings.Join(records, ",")
 				} else {
-					ck["status"] = testStatusFail
-					if ck["reason"] == "" {
-						ck["reason"] = "assertion failed with " + strings.Join(records, ",")
+					ck.Status = testStatusFail
+					if ck.Reason.Verb == "" {
+						ck.Reason = AssertObj{
+							Verb:  "assertion failed with",
+							Value: strings.Join(records, ","),
+						}
 					}
 
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed with %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, strings.Join(records, ",")))
@@ -348,37 +365,49 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed with no record matched with given condition (%s)", assert.Type, assert.Config.Operator, assert.Config.Value, strings.Join(records, ",")))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
-				ck["status"] = testStatusFail
-				ck["reason"] = assert.Type + " assertion failed with " + strings.Join(records, ",")
+				ck.Status = testStatusFail
+				ck.Reason = AssertObj{
+					Verb:  "assertion failed with ",
+					Value: strings.Join(records, ","),
+				}
 			}
 		case assertTypeDNSDomainRegistrationExpiry:
-			ck["type"] = assert.Type
-			ck["status"] = testStatusOK
+			ck.Status = testStatusOK
+			ck.Type = assert.Type
 			expiry, err := checker.getDNSExpiry()
 			if err != nil {
 				slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err.Error()))
-				ck["status"] = testStatusError
-				ck["reason"] = "Error while getting domain expiration"
-				ck["actual"] = "N/A"
+				ck.Status = testStatusError
+				ck.Reason = AssertObj{
+					Verb: "Error while getting domain expiration",
+				}
+				ck.Actual = "N/A"
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s failed, error while geting the domain expiry: %s, ", assert.Type, assert.Config.Operator, assert.Config.Value, err))
 				testStatus.status = testStatusError
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
-				ck["actual"] = strconv.Itoa(expiry)
-				ck["reason"] = "domain registration expiry assertion passed"
+				ck.Actual = strconv.Itoa(expiry)
+				ck.Reason = AssertObj{
+					Verb: "domain registration expiry assertion passed",
+				}
 				if !assertFloat(float64(expiry), assert) {
-					ck["status"] = testStatusFail
-					ck["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
+					ck.Status = testStatusFail
+					ck.Reason = AssertObj{
+						Verb:     "should be",
+						Operator: assert.Config.Operator,
+						Value:    assert.Config.Value,
+					}
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got domain expiration %v)", assert.Type, assert.Config.Operator, assert.Config.Value, expiry))
 					testStatus.status = testStatusFail
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 			}
 		}
-		checker.assertions = append(checker.assertions, ck)
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 	return testStatus
 }
+
 func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.IP) {
 	c := checker.c
 	ctx := context.Background()

@@ -176,18 +176,22 @@ func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus string) testStatus {
 	testStatusMsg := make([]string, 0)
 	for _, assert := range checker.c.Request.Assertions.TCP.Cases {
-		ck := make(map[string]string)
-		ck["type"] = assert.Type
-		ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
-			" " + assert.Config.Value
-		ck["status"] = testStatusPass
+		ck := AssertResult{
+			Type:   assert.Type,
+			Status: testStatusPass,
+			Reason: AssertObj{
+				Verb:     "should be ",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value,
+			},
+		}
 
 		switch assert.Type {
 		case "response_time":
-			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
-			ck["reason"] += ck["reason"] + "ms"
+			ck.Actual = fmt.Sprintf("%v", checker.timers["duration"])
+			ck.Reason.Value += ck.Reason.Value + "ms"
 			if !assertFloat(checker.timers["duration"], assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -195,10 +199,10 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 
 		case "network_hops":
 			v, there := checker.attrs.Get("hops.count")
-			ck["actual"] = fmt.Sprintf("%v", v.Int())
+			ck.Actual = fmt.Sprintf("%v", v.Int())
 
 			if checker.c.Request.TTL && there && !assertInt(v.Int(), assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, v.Int()))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
@@ -206,18 +210,21 @@ func (checker *tcpChecker) processTCPAssertions(testStatus testStatus, tcpStatus
 
 		case assertTypeTCPConnection:
 			assert.Config.Operator = "is"
-			ck["actual"] = tcpStatus
-			ck["reason"] = "should be is " + assert.Config.Value
+			ck.Actual = tcpStatus
+			ck.Reason = AssertObj{
+				Verb:  "should be ",
+				Value: assert.Config.Value,
+			}
 
 			if !assertString(tcpStatus, assert) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, tcpStatus))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 		}
 
-		checker.assertions = append(checker.assertions, ck)
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 	return testStatus
 }
@@ -259,15 +266,18 @@ func (checker *tcpChecker) check() testStatus {
 		testStatus.msg = fmt.Sprintf("error resolving dns: %v", lcErr)
 
 		for _, assert := range checker.c.Request.Assertions.TCP.Cases {
-			checker.assertions = append(checker.assertions,
-				map[string]string{
-					"type": assert.Type,
-					"reason": "should be " +
-						strings.ReplaceAll(assert.Config.Operator, "_", " ") +
+			ck := AssertResult{
+				Type:   assert.Type,
+				Status: testStatusFail,
+				Actual: "DNS resolution failed",
+				Reason: AssertObj{
+					Verb: "should be ",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " ") +
 						" " + assert.Config.Value,
-					"status": "FAIL",
-					"actual": "DNS resolution failed",
-				})
+					Value: assert.Config.Value,
+				},
+			}
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 		checker.processTCPResponse(testStatus)
 		return testStatus

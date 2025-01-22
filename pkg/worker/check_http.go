@@ -167,12 +167,15 @@ func (checker *httpChecker) processHTTPError(testStatus testStatus) {
 	checker.testBody["statusCode"] = http.StatusInternalServerError
 
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
-		checker.assertions = append(checker.assertions, map[string]string{
-			"type":   assert.Type,
-			"reason": testStatus.msg,
-			"actual": "N/A",
-			"status": "FAIL",
-		})
+		ck := AssertResult{
+			Type:   assert.Type,
+			Actual: "N/A",
+			Status: testStatusFail,
+			Reason: AssertObj{
+				Verb: testStatus.msg,
+			},
+		}
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 
 	checker.processHTTPResponse()
@@ -298,9 +301,13 @@ func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
 }
 
 func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
-	assertions := make(map[string]string)
-	assertions["reason"] = "should be " + assert.Config.Operator +
-		" " + assert.Config.Value
+	ck := AssertResult{
+		Reason: AssertObj{
+			Verb:     "should be ",
+			Operator: assert.Config.Operator,
+			Value:    assert.Config.Value,
+		},
+	}
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
@@ -309,18 +316,18 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMs
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, body))
 
-		assertions["status"] = testStatusFail
-		assertions["actual"] = "Not Matched"
+		ck.Status = testStatusFail
+		ck.Actual = "Not Matched"
 	} else {
-		assertions["status"] = testStatusPass
-		assertions["actual"] = "Matched"
+		ck.Status = testStatusPass
+		ck.Actual = "Matched"
 	}
+	assertions := ck.ToMap()
 
 	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
-	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
@@ -341,76 +348,98 @@ func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions, testStat
 	}
 
 	assert.Config.Operator = "is"
-	assertions["reason"] = "should be " + assert.Config.Operator +
-		" " + assert.Config.Value
-	assertions["actual"] = hash
+	ck := AssertResult{
+		Reason: AssertObj{
+			Verb:     "should be ",
+			Operator: assert.Config.Operator,
+			Value:    assert.Config.Value,
+		},
+		Actual: hash,
+	}
 	if !assertString(hash, assert) {
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, hash))
-		assertions["status"] = testStatusFail
+		ck.Actual = testStatusFail
 	} else {
-		assertions["status"] = testStatusPass
+		ck.Actual = testStatusPass
 	}
 
+	assertions := ck.ToMap()
 	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
-	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	ck := AssertResult{
+		Reason: AssertObj{
+			Verb:     "should be ",
+			Operator: assert.Config.Operator,
+			Value:    assert.Config.Value,
+		},
+		Actual: header,
+	}
 
-	assertions["actual"] = header
-	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertString(header, assert) {
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, header))
-		assertions["status"] = testStatusFail
+		ck.Status = testStatusFail
 	} else {
-		assertions["status"] = testStatusPass
+		ck.Status = testStatusPass
 	}
+	assertions := ck.ToMap()
 	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
 	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
-	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	ck := AssertResult{
+		Reason: AssertObj{
+			Verb:     "should be ",
+			Operator: assert.Config.Operator,
+			Value:    assert.Config.Value,
+		},
+		Actual: fmt.Sprintf("%v", responseTime),
+	}
 
-	assertions["actual"] = fmt.Sprintf("%v", responseTime)
-	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertFloat(responseTime, assert) {
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, responseTime))
-		assertions["status"] = testStatusFail
+		ck.Status = testStatusFail
 	} else {
-		assertions["status"] = testStatusPass
+		ck.Status = testStatusPass
 	}
+	assertions := ck.ToMap()
 	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
-	assertions := make(map[string]string)
+	ck := AssertResult{
+		Reason: AssertObj{
+			Verb:     "should be ",
+			Operator: assert.Config.Operator,
+			Value:    assert.Config.Value,
+		},
+		Actual: fmt.Sprintf("%v", statusCode),
+	}
 
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
 
-	assertions["actual"] = fmt.Sprintf("%v", statusCode)
-	assertions["reason"] = "should be " + assert.Config.Operator +
-		" " + assert.Config.Value
 	if !assertInt(int64(statusCode), assert) {
 		testStatus.status = testStatusFail
 		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, statusCode))
-		assertions["status"] = testStatusFail
+		ck.Status = testStatusFail
 	} else {
-		assertions["status"] = testStatusPass
+		ck.Status = testStatusPass
 	}
-
+	assertions := ck.ToMap()
 	return assertions, testStatus, testStatusMsg
 }
 
@@ -476,8 +505,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	checker.testBody["headers"] = hdr
 
 	checker.attrs.PutStr("check.details.body_size",
-		fmt.Sprintf("%d KB\n", len(bs)/1024))
-	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
+		fmt.Sprintf("%.4f KB\n", float64(len(bs))/1024.0))
 
 	contentType := hdr["Content-Type"]
 	bss := string(bs)
@@ -491,6 +519,7 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	var checkHttp200 = true
 	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
+		assert.Config.Value = strings.TrimSpace(assert.Config.Value)
 		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
@@ -518,16 +547,28 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 			tStatus.msg = strings.Join(testStatusMsg, "; ")
 		}
 
-		assertChecker := map[string]string{
-			"type":   assert.Type,
-			"status": "OK",
-			"reason": fmt.Sprintf("should be %s %s", strings.ReplaceAll(assert.Config.Operator, "_", " "), assert.Config.Value),
-			"actual": "N/A",
+		assertChecker := AssertResult{
+			Type:   assert.Type,
+			Status: testStatusOK,
+			Reason: AssertObj{
+				Verb:     "should be",
+				Operator: assert.Config.Operator,
+				Value:    assert.Config.Value,
+			},
+			Actual: "N/A",
 		}
 		for k, v := range testAssertions {
-			assertChecker[k] = v
+			if k == "status" {
+				assertChecker.Status = v
+			}
+			if k == "actual" {
+				assertChecker.Actual = v
+			}
+			if k == "type" {
+				assertChecker.Type = v
+			}
 		}
-		checker.assertions = append(checker.assertions, assertChecker)
+		checker.assertions = append(checker.assertions, assertChecker.ToMap())
 	}
 
 	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&

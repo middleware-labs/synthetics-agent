@@ -129,13 +129,17 @@ func (checker *icmpChecker) processICMPResponse(testStatus testStatus) {
 	c := checker.c
 	if testStatus.status != testStatusOK {
 		for _, v := range c.Request.Assertions.ICMP.Cases {
-			checker.assertions = append(checker.assertions, map[string]string{
-				"type":   v.Type,
-				"status": testStatusFail,
-				"reason": fmt.Sprintf("should be %s %s",
-					strings.ReplaceAll(v.Config.Operator, "_", " "), v.Config.Value),
-				"actual": "N/A",
-			})
+			ck := AssertResult{
+				Type:   v.Type,
+				Status: testStatusFail,
+				Reason: AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(v.Config.Operator, "_", " "),
+					Value:    v.Config.Value,
+				},
+				Actual: "N/A",
+			}
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 	}
 
@@ -202,15 +206,17 @@ func (checker *icmpChecker) check() testStatus {
 		testStatus.msg = fmt.Sprintf("error resolving dns: %v", lcErr)
 
 		for _, assert := range checker.c.Request.Assertions.TCP.Cases {
-			checker.assertions = append(checker.assertions,
-				map[string]string{
-					"type": assert.Type,
-					"reason": "should be " +
-						strings.ReplaceAll(assert.Config.Operator, "_", " ") +
-						" " + assert.Config.Value,
-					"status": "FAIL",
-					"actual": "DNS resolution failed",
-				})
+			ck := AssertResult{
+				Type: assert.Type,
+				Reason: AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+					Value:    assert.Config.Value,
+				},
+				Status: testStatusFail,
+				Actual: "DNS resolution failed",
+			}
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 		checker.processICMPResponse(testStatus)
 		return testStatus
@@ -290,41 +296,46 @@ func (checker *icmpChecker) check() testStatus {
 	}
 	testStatusMsg := make([]string, 0)
 	for _, v := range c.Request.Assertions.ICMP.Cases {
-		ck := make(map[string]string)
-		ck["type"] = v.Type
-		ck["status"] = "OK"
-		ck["reason"] = fmt.Sprintf("should be %s %s", strings.ReplaceAll(v.Config.Operator, "_", " "), v.Config.Value)
+		ck := AssertResult{
+			Type:   v.Type,
+			Status: testStatusOK,
+			Reason: AssertObj{
+				Verb:     "should be",
+				Operator: strings.ReplaceAll(v.Config.Operator, "_", " "),
+				Value:    v.Config.Value,
+			},
+		}
 
 		switch v.Type {
 		case assertTypeICMPLatency:
-			ck["actual"] = fmt.Sprintf("%f", checker.timers["rtt"])
+			ck.Actual = fmt.Sprintf("%f", checker.timers["rtt"])
 			if !assertFloat(checker.timers["duration"], v) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", v.Type, v.Config.Operator, v.Config.Value, checker.timers["rtt"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 		case assertTypeICMPPacketLoss:
-			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_loss"])
+			ck.Actual = fmt.Sprintf("%f", checker.timers["packet_loss"])
 			if !assertInt(int64(checker.timers["packet_loss"]), v) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", v.Type, v.Config.Operator, v.Config.Value, checker.timers["packet_loss"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 		case assertTypeICMPPacketRecv:
-			ck["actual"] = fmt.Sprintf("%f", checker.timers["packet_recv"])
+			ck.Actual = fmt.Sprintf("%f", checker.timers["packet_recv"])
 			if !assertInt(int64(checker.timers["packet_recv"]), v) {
-				ck["status"] = testStatusFail
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", v.Type, v.Config.Operator, v.Config.Value, checker.timers["packet_recv"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 		}
 
-		checker.assertions = append(checker.assertions, ck)
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 	checker.processICMPResponse(testStatus)
 	return testStatus

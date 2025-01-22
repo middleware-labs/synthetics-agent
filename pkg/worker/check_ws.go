@@ -134,60 +134,76 @@ func (checker *wsChecker) fillWSAssertions(httpResp *http.Response,
 	}
 	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.WebSocket.Cases {
-		ck := make(map[string]string)
+		ck := AssertResult{
+			Type: strings.ReplaceAll(assert.Type, "_", " "),
+		}
 
-		ck["type"] = strings.ReplaceAll(assert.Type, "_", " ")
 		switch assert.Type {
 		case assertTypeWSResponseTime:
-			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
-			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + fmt.Sprintf("%v", assert.Config.Value)
+			ck.Actual = fmt.Sprintf("%v", checker.timers["duration"])
+			ck.Reason = AssertObj{
+				Verb:     "should be",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value,
+			}
 			if !assertFloat(checker.timers["duration"], assert) {
-				ck["status"] = testStatusFail
-				ck["reason"] = fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"])
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
-				ck["status"] = testStatusPass
-				ck["reason"] = "response time matched with the condition"
+				ck.Status = testStatusPass
+				ck.Reason = AssertObj{
+					Verb: "response time matched with the condition",
+				}
 			}
 		case assertTypeWSRecvMessage:
-			ck["actual"] = recMsg
-			ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
+			ck.Actual = recMsg
+			ck.Reason = AssertObj{
+				Verb:     "should be",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value,
+			}
 			if !assertString(recMsg, assert) {
-				ck["status"] = testStatusFail
-				ck["reason"] = fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, recMsg)
+				ck.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, recMsg))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
-				ck["status"] = testStatusPass
+				ck.Status = testStatusPass
 			}
 		case assertTypeWSHeader:
 			if httpResp != nil && len(httpResp.Header) > 0 {
 				vl := httpResp.Header.Get(assert.Config.Target)
-				ck["actual"] = vl
-				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
+				ck.Actual = vl
+				ck.Reason = AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+					Value:    assert.Config.Value,
+				}
 				if !assertString(vl, assert) {
-					ck["status"] = testStatusFail
-					ck["reason"] = fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, vl)
+					ck.Status = testStatusFail
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, vl))
 					testStatus.status = testStatusFail
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
-					ck["status"] = testStatusPass
+					ck.Status = testStatusPass
 				}
 			} else {
 				testStatus.status = testStatusFail
-				ck["status"] = testStatusFail
-				ck["actual"] = "No Header"
-				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value
+				ck.Status = testStatusFail
+				ck.Actual = "No Header"
+				ck.Reason = AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+					Value:    assert.Config.Value,
+				}
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got no header)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value))
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 		}
 
-		checker.assertions = append(checker.assertions, ck)
+		checker.assertions = append(checker.assertions, ck.ToMap())
 	}
 
 	return testStatus

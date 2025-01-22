@@ -76,19 +76,18 @@ func (checker *sslChecker) processSSLResponse(testStatus testStatus) {
 	c := checker.c
 
 	if testStatus.status != testStatusOK {
-		checker.assertions = append(checker.assertions, map[string]string{
-			"type":   assertTypeSSLCertificate,
-			"reason": "will not be checked",
-			"actual": "N/A",
-			"status": "FAIL",
-		})
+		ck := AssertResult{
+			Type:   assertTypeSSLCertificate,
+			Actual: "N/A",
+			Status: testStatusFail,
+			Reason: AssertObj{
+				Verb: "will not be checked",
+			},
+		}
+		checker.assertions = append(checker.assertions, ck.ToMap())
 		for _, assert := range c.Request.Assertions.Ssl.Cases {
-			checker.assertions = append(checker.assertions, map[string]string{
-				"type":   assert.Type,
-				"reason": "will not be checked",
-				"actual": "N/A",
-				"status": "FAIL",
-			})
+			ck.Type = assert.Type
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 	}
 
@@ -136,9 +135,13 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 	c := checker.c
 	for _, assert := range c.Request.Assertions.Ssl.Cases {
 
-		assertChecker := map[string]string{
-			"type": assert.Type,
+		// assertChecker := map[string]string{
+		// 	"type": assert.Type,
+		// }
+		assertChecker := AssertResult{
+			Type: assert.Type,
 		}
+
 		switch assert.Type {
 		case assertTypeSSLCertificate:
 			if assert.Config.Operator == "expires_in_greater_then_days" {
@@ -147,34 +150,40 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 			if assert.Config.Operator == "expires_in_less_then_days" {
 				assert.Config.Operator = "less_then"
 			}
-			assertChecker["reason"] = "will expire in " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value + " days"
-			assertChecker["actual"] = strconv.FormatInt(expiryDays, 10) + " days"
+			assertChecker.Reason = AssertObj{
+				Verb:     "will expire in ",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value + " days",
+			}
+			assertChecker.Actual = strconv.FormatInt(expiryDays, 10) + " days"
 
 			if !assertInt(expiryDays, assert) {
-				assertChecker["status"] = testStatusFail
+				assertChecker.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, expiryDays))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
-				assertChecker["status"] = testStatusPass
+				assertChecker.Status = testStatusPass
 			}
 
 		case assertTypeSSLResponseTime:
-			assertChecker["reason"] = "response time is " +
-				strings.ReplaceAll(assert.Config.Operator, "_", " ") +
-				" " + assert.Config.Value + " ms"
-			assertChecker["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
+			assertChecker.Reason = AssertObj{
+				Verb:     "is",
+				Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+				Value:    assert.Config.Value + " ms",
+			}
+			assertChecker.Actual = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
 			if !assertFloat(checker.timers["duration"], assert) {
-				assertChecker["status"] = testStatusFail
+				assertChecker.Status = testStatusFail
 				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
 				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
-				assertChecker["status"] = testStatusPass
+				assertChecker.Status = testStatusPass
 			}
 		}
 
-		checker.assertions = append(checker.assertions, assertChecker)
+		checker.assertions = append(checker.assertions, assertChecker.ToMap())
 
 	}
 	return testStatus
@@ -280,12 +289,18 @@ func (checker *sslChecker) check() testStatus {
 		"Protocol":    ver,
 	}
 
-	checker.assertions = append(checker.assertions, map[string]string{
-		"type":   "certificate",
-		"reason": "is valid",
-		"actual": fmt.Sprintf("%v", isCa),
-		"status": cSta,
-	})
+	ck := AssertResult{
+		Type:   assertTypeSSLCertificate,
+		Actual: fmt.Sprintf("%v", isCa),
+		Status: cSta,
+		Reason: AssertObj{
+			Verb: "is valid",
+		},
+	}
+	checker.assertions = append(checker.assertions, ck.ToMap())
+
+	// TODO: test commeneted(recommended) line instead and use it
+	// expiryDays := int64(time.Until(cert.NotAfter).Hours() / 24)
 	expiryDays := int64(cert.NotAfter.Sub(time.Now()).Hours() / 24)
 
 	if !checker.c.Request.SslSignedCertificate && !isCa {

@@ -69,39 +69,46 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 				break
 			}
 
-			ck := make(map[string]string)
-			ck["type"] = strings.ReplaceAll(assert.Type, "_", " ")
+			ck := AssertResult{
+				Type: strings.ReplaceAll(assert.Type, "_", " "),
+			}
 
 			switch assert.Type {
 			case assertTypeUDPResponseTime:
 				dur := checker.timers["duration"]
-				ck["actual"] = fmt.Sprintf("%v", dur)
-				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
-					" " + fmt.Sprintf("%v", assert.Config.Value)
-				ck["status"] = testStatusOK
+				ck.Actual = fmt.Sprintf("%v", dur)
+				ck.Reason = AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+					Value:    assert.Config.Value,
+				}
+				ck.Status = testStatusOK
 
 				if !assertFloat(dur, assert) {
-					ck["status"] = testStatusFail
+					ck.Status = testStatusFail
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, dur))
 					testStatus.status = testStatusFail
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 
 			case assertTypeUDPRecvMessage:
-				ck["actual"] = "Matched"
-				ck["reason"] = "should be " + strings.ReplaceAll(assert.Config.Operator, "_", " ") +
-					" " + assert.Config.Value
-				ck["status"] = testStatusOK
+				ck.Actual = "Matched"
+				ck.Reason = AssertObj{
+					Verb:     "should be",
+					Operator: strings.ReplaceAll(assert.Config.Operator, "_", " "),
+					Value:    assert.Config.Value,
+				}
+				ck.Status = testStatusOK
 				if !assertString(string(received), assert) {
-					ck["status"] = testStatusFail
-					ck["actual"] = "Not Matched"
+					ck.Status = testStatusFail
+					ck.Actual = "Not Matched"
 					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, string(received)))
 					testStatus.status = testStatusFail
 					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 			}
 
-			checker.assertions = append(checker.assertions, ck)
+			checker.assertions = append(checker.assertions, ck.ToMap())
 		}
 
 		resultStr, _ := json.Marshal(checker.assertions)

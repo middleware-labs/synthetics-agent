@@ -88,12 +88,17 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		} else {
 			for _, allallAssertions := range c.Request.HTTPMultiSteps {
 				for _, assert := range allallAssertions.Request.Assertions.HTTP.Cases {
-					checker.assertions = append(checker.assertions, map[string]string{
-						"type":   assert.Type,
-						"reason": "should be " + assert.Config.Operator + " " + assert.Config.Value,
-						"actual": "N/A",
-						"status": testStatusFail,
-					})
+					ck := AssertResult{
+						Type: assert.Type,
+						Reason: AssertObj{
+							Verb:     "should be",
+							Operator: assert.Config.Operator,
+							Value:    assert.Config.Value,
+						},
+						Status: testStatusFail,
+						Actual: "N/A",
+					}
+					checker.assertions = append(checker.assertions, ck.ToMap())
 				}
 			}
 		}
