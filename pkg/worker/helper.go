@@ -39,10 +39,6 @@ type CheckTestRequestHeaders struct {
 type CheckTestRequest struct {
 	URL        string              `json:"url"`
 	Headers    map[string]string   `json:"headers"`
-	Browsers   map[string][]string `json:"browsers"`
-	Recording  json.RawMessage     `json:"recording"`
-	Timeout    int                 `json:"waitTimeout"`
-	StepsCount int                 `json:"stepsCount"`
 }
 
 type SyntheticsExpectMeta struct {
@@ -84,6 +80,10 @@ type SyntheticsRequestOptions struct {
 	StepTestIndex             int                     `json:"step_test_index"`
 	HTTPMultiTest             bool                    `json:"http_multi_test"`
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
+	Browsers   map[string][]string `json:"browsers"`
+	Recording  json.RawMessage     `json:"recording"`
+	Timeout    int                 `json:"waitTimeout"`
+	StepsCount int                 `json:"stepsCount"`
 	TakeScreenshots           bool                    `json:"take_screenshots"`
 	Timezone                  string                  `json:"timezone"`
 	Language                  string                  `json:"language"`

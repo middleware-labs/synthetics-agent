@@ -58,7 +58,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 	checker.attrs.PutInt("check.run_type", 0)
 	checker.attrs.PutStr("check.type", "browser")
 	checker.attrs.PutStr("check.device.id", args.Device)
-	checker.attrs.PutInt("check.steps.total", int64(checker.c.CheckTestRequest.StepsCount))
+	checker.attrs.PutInt("check.steps.total", int64(checker.c.Request.StepsCount))
 	checker.attrs.PutInt("check.steps.completed", 0)
 	checker.attrs.PutInt("check.steps.errors", 0)
 	checker.attrs.PutInt("check.test_duration", 0)
@@ -69,7 +69,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		"device":                   args.Device,
 		"region":                   args.Region,
 		"testId":                   args.TestId,
-		"recording":                checker.c.CheckTestRequest.Recording,
+		"recording":                checker.c.Request.Recording,
 		"screenshots":              checker.c.Request.TakeScreenshots,
 		"ignoreCertificateErrors":  checker.c.Request.HTTPPayload.IgnoreServerCertificateError,
 		"proxyServer":              checker.c.Request.HTTPPayload.Proxy.URL,
@@ -80,11 +80,11 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		"cookies":                  checker.c.Request.HTTPPayload.Cookies,
 		"disableCors":              checker.c.Request.DisableCors,
 		"disableCsp":               checker.c.Request.DisableCSP,
-		"headers":                  checker.c.CheckTestRequest.Headers,
-		"waitTimeout":              checker.c.CheckTestRequest.Timeout,
+		"headers":                  checker.c.Request.HTTPHeaders,
+		"waitTimeout":              checker.c.Request.Timeout,
 		"sslCertificatePrivateKey": checker.c.Request.SslCertificatePrivateKey,
 		"sslCertificate":           checker.c.Request.SslCertificate,
-		"stepsCount":               checker.c.CheckTestRequest.StepsCount,
+		"stepsCount":               checker.c.Request.StepsCount,
 	}
 
 	payload := map[string]interface{}{
@@ -151,7 +151,9 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 				}
 			}
 		}
-		checker.attrs.PutInt("check.timeToInteractive", int64(testResult["timeToInteractive"].(float64)))
+		if timeToInteractive, ok := testResult["timeToInteractive"].(float64); ok {
+			checker.attrs.PutInt("check.timeToInteractive", int64(timeToInteractive))
+		}
 		if testSummary, ok := testResult["test_summary"].(map[string]interface{}); ok {
 			checker.attrs.PutInt("check.steps.completed", int64(testSummary["completed"].(float64)))
 			checker.attrs.PutInt("check.steps.errors", int64(testSummary["errors"].(float64)))
@@ -165,9 +167,11 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 				}
 			}
 		}
+		if testDuration, ok := testResult["test_duration"].(float64); ok {
+			checker.attrs.PutInt("check.test_duration", int64(testDuration))
+		}
 	}
 
-	checker.attrs.PutInt("check.test_duration", int64(result["test_duration"].(float64)))
 	checker.timers["browser"] = timeInMs(time.Since(start))
 	return tStatus
 }

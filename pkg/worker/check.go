@@ -239,7 +239,7 @@ func (cs *CheckState) fire() error {
 
 	if c.Proto == "browser" {
 		browserChecker := NewBrowserChecker(c)
-		browsers := c.CheckTestRequest.Browsers
+		browsers := c.Request.Browsers
 		var wg sync.WaitGroup
 
 		for browser, devices := range browsers {
