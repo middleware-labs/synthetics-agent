@@ -65,7 +65,6 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 
 	cmdArgs := map[string]interface{}{
 		"browser":                  args.Browser,
-		"collectRum":               true,
 		"device":                   args.Device,
 		"region":                   args.Region,
 		"testId":                   args.TestId,
@@ -86,6 +85,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		"sslCertificatePrivateKey": checker.c.Request.SslCertificatePrivateKey,
 		"sslCertificate":           checker.c.Request.SslCertificate,
 		"stepsCount":               checker.c.Request.StepsCount,
+		"rumConfig":                checker.c.Request.RUMConfig,
 	}
 
 	payload := map[string]interface{}{

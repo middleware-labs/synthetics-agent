@@ -80,17 +80,17 @@ type SyntheticsRequestOptions struct {
 	StepTestIndex             int                     `json:"step_test_index"`
 	HTTPMultiTest             bool                    `json:"http_multi_test"`
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
-	Browsers   map[string][]string `json:"browsers"`
-	Recording  json.RawMessage     `json:"recording"`
-	Timeout    int                 `json:"waitTimeout"`
-	StepsCount int                 `json:"stepsCount"`
+	Browsers                  map[string][]string     `json:"browsers"`
+	Recording                 json.RawMessage         `json:"recording"`
+	RUMConfig                 map[string]string       `json:"rumConfig"`
+	Timeout                   int                     `json:"waitTimeout"`
+	StepsCount                int                     `json:"stepsCount"`
 	TakeScreenshots           bool                    `json:"take_screenshots"`
 	Timezone                  string                  `json:"timezone"`
 	Language                  string                  `json:"language"`
 	DisableCors               bool                    `json:"disable_cors"`
 	DisableCSP                bool                    `json:"disable_csp"`
 }
-
 type HTTPMultiStepsRequest struct {
 	HTTPMethod  string               `json:"http_method"`
 	HTTPVersion string               `json:"http_version"`
