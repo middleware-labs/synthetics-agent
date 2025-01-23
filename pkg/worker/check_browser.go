@@ -69,6 +69,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		"device":                   args.Device,
 		"region":                   args.Region,
 		"testId":                   args.TestId,
+		"url":                      checker.c.Endpoint,
 		"recording":                checker.c.Request.Recording,
 		"screenshots":              checker.c.Request.TakeScreenshots,
 		"ignoreCertificateErrors":  checker.c.Request.HTTPPayload.IgnoreServerCertificateError,
