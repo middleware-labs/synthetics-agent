@@ -240,6 +240,8 @@ func (checker *wsChecker) processWSResonse(testStatus *testStatus, httpResp *htt
 func (checker *wsChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	testStatus := testStatus{
 		status: testStatusOK,
 	}

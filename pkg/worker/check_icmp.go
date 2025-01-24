@@ -183,6 +183,8 @@ func (checker *icmpChecker) check() testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 
 	icmpStatus := icmpStatusEstablished
 	err := checker.pinger.Run() // Blocks until finished.
@@ -194,7 +196,6 @@ func (checker *icmpChecker) check() testStatus {
 		return testStatus
 	}
 
-	start := time.Now()
 	addr, lcErr := checker.netter.LookupIP(checker.c.Endpoint)
 	if lcErr != nil {
 		checker.timers["duration"] = timeInMs(time.Since(start))

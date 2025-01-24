@@ -251,6 +251,7 @@ func (checker *tcpChecker) check() testStatus {
 
 	tcpStatus := tcpStatusEstablished
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 
 	addr, lcErr := checker.netter.LookupIP(checker.c.Endpoint)
 	if lcErr != nil {

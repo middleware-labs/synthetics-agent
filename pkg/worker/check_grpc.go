@@ -351,9 +351,10 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 }
 func (checker *grpcChecker) check() testStatus {
 	c := checker.c
+	_start := time.Now()
+	checker.attrs.PutInt("check.created_at", _start.UnixMilli())
 	ctx, cnlFnc := context.WithCancel(context.Background())
 	defer cnlFnc()
-	_start := time.Now()
 
 	clientGRPC, err := grpccheckerhelper.NewClientGRPC(ctx, grpccheckerhelper.ClientDialOptions{
 		Target:      fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
