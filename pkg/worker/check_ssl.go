@@ -186,6 +186,8 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 // This function is part of the synthetics-agent package and is located in the check_ssl.go file.
 func (checker *sslChecker) check() testStatus {
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	host := checker.c.Endpoint + ":" + checker.c.Request.Port
 
 	testStatus := testStatus{

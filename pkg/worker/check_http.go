@@ -417,6 +417,7 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 
 	tStatus := testStatus{
 		status: testStatusOK,
