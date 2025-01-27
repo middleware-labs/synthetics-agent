@@ -237,7 +237,7 @@ func TestICMPCheck(t *testing.T) {
 							ICMP: AssertionsCasesOptions{
 								Cases: []CaseOptions{
 									{
-										Type: "packet_received",
+										Type: "packets_received",
 										Config: struct {
 											Operator string `json:"operator"`
 											Target   string `json:"target"`
@@ -308,7 +308,7 @@ func TestICMPCheck(t *testing.T) {
 									},
 									{
 
-										Type: "packet_received",
+										Type: "packets_received",
 										Config: struct {
 											Operator string `json:"operator"`
 											Target   string `json:"target"`
@@ -435,7 +435,7 @@ func TestICMPCheck(t *testing.T) {
 									},
 									{
 
-										Type: "packet_received",
+										Type: "packets_received",
 										Config: struct {
 											Operator string `json:"operator"`
 											Target   string `json:"target"`
