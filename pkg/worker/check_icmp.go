@@ -14,7 +14,7 @@ import (
 const (
 	assertTypeICMPLatency    string = "latency"
 	assertTypeICMPPacketLoss string = "packet_loss"
-	assertTypeICMPPacketRecv string = "packet_received"
+	assertTypeICMPPacketRecv string = "packets_received"
 )
 
 var (
