@@ -53,7 +53,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		status: testStatusOK,
 	}
 	checker.attrs.PutStr("check.test_id", args.TestId)
-	checker.attrs.PutInt("check.created_at", start.Unix())
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 	checker.attrs.PutStr("check.device.browser.type", args.Browser)
 	checker.attrs.PutInt("check.run_type", 0)
 	checker.attrs.PutStr("check.type", "browser")

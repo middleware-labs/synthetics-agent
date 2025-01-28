@@ -50,6 +50,14 @@ type SyntheticsExpectMeta struct {
 	LatencyLimit    float64 `json:"latency_limit,omitempty"`
 }
 
+type RUMConfig struct {
+	Enabled     bool   `json:"enabled"`
+	ProjectName string `json:"projectName"`
+	ServiceName string `json:"serviceName"`
+	AccountKey  string `json:"accountKey"`
+	Target      string `json:"target"`
+}
+
 type SyntheticsRequestOptions struct {
 	Topic                     string                  `json:"topic" default:"locations"`
 	Premise                   []string                `json:"premise"`
@@ -82,7 +90,7 @@ type SyntheticsRequestOptions struct {
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
 	Browsers                  map[string][]string     `json:"browsers"`
 	Recording                 json.RawMessage         `json:"recording"`
-	RUMConfig                 map[string]string       `json:"rumConfig"`
+	RUMConfig                 RUMConfig               `json:"rumConfig"`
 	Timeout                   int                     `json:"waitTimeout"`
 	StepsCount                int                     `json:"stepsCount"`
 	TakeScreenshots           bool                    `json:"take_screenshots"`
