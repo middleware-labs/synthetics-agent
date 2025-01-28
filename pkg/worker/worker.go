@@ -192,11 +192,11 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	w.consumer, err = w.pulsarClient.Consumer("persistent/public/default/"+topic,
 		"subscribe", ws.Params{
 			"subscriptionType":           "Shared",
-			"ackTimeoutMillis":           strconv.Itoa(30 * 60 * 1000),
+			"ackTimeoutMillis":           strconv.Itoa(60 * 60 * 1000),
 			"consumerName":               consumerName,
 			"negativeAckRedeliveryDelay": "0",
 			"pullMode":                   "false",
-			"receiverQueueSize":          "5000",
+			"receiverQueueSize":          "500000",
 			"token":                      token,
 		})
 	if err != nil {
