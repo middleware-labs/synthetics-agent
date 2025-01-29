@@ -186,6 +186,8 @@ func (*defaultUDPNetHelper) setUDPReadDeadline(conn *net.UDPConn, t time.Time) e
 func (checker *udpChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	testStatus := testStatus{
 		status: testStatusOK,
 	}

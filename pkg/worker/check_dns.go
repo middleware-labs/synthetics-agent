@@ -481,6 +481,8 @@ func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.
 func (checker *dnsChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	testStatus := testStatus{
 		status: testStatusOK,
 		msg:    "",

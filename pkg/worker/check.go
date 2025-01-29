@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -71,7 +72,7 @@ func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 		return newGRPCChecker(c)
 	}
 
-	return nil, nil
+	return nil, errors.New("no case matched")
 }
 
 func assertString(data string, assert CaseOptions) bool {
@@ -154,16 +155,21 @@ func percentCalc(val float64, percent float64) float64 {
 
 func (cs *CheckState) testFire() (map[string]interface{}, error) {
 	protocolChecker, err := getProtocolChecker(cs.check)
-	var resp map[string]interface{}
-	if err == nil {
-		protocolChecker.check()
-		resp = protocolChecker.getTestResponseBody()
+	if err != nil {
+		return nil, err
 	}
-	return resp, err
+	var resp map[string]interface{}
+	protocolChecker.check()
+	resp = protocolChecker.getTestResponseBody()
+	return resp, nil
 }
+
 func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 
 	protocolChecker, err := getProtocolChecker(cs.check)
+	if err != nil {
+		return nil, err
+	}
 
 	testStatus := protocolChecker.check()
 	timers := protocolChecker.getTimers()
@@ -173,7 +179,7 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 		"testStatus": testStatus,
 		"timers":     timers,
 		"attr":       attr.AsRaw(),
-	}, err
+	}, nil
 }
 
 func (cs *CheckState) fire() error {
