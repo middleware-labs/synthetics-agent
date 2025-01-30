@@ -26,10 +26,11 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	if isCheckTestReq {
-		resSteps := response["steps"]
+		resSteps, resHeaders := response["steps"], response["headers"]
 		checker.testBody = map[string]interface{}{
 			"multiStepPreview": true,
 			"body":             resSteps,
+			"headers":          resHeaders,
 		}
 		// finishTestRequest(c, _testBody)
 		return testStatus

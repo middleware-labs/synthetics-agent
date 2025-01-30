@@ -50,7 +50,7 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 		return "", fmt.Errorf("error executing k6 script: %s", err.Error())
 	}
 
-	pattern1 := `###START->([^=]+)<-END###`
+	pattern1 := `###START->(.*?)<-END###`
 	return findValueToPattern(string(outputBytes), pattern1)
 
 	//pattern2 := `###OTHER_START->([^=]+)<-OTHER_START###`
@@ -93,6 +93,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 		const pattern = /{{\$(\d+)\.(.*?)}}/g
 		const JSONPaths = {}
 		const stepsResponse = {}
+		const stepsHeader = {}
 		const assertions = {}
 
 		for (let i = 0; i < steps.length; i++) {
@@ -105,6 +106,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 			const endpointMatches = step.endpoint.match(pattern)
 			JSONPaths[stepKey] = endpointMatches && Array.isArray(endpointMatches) ? endpointMatches : []
 			stepsResponse[stepKey] = {}
+			stepsHeader[stepKey] = {}
 			const bodyMatches = step.request.http_payload.request_body.match(pattern)
 			if (bodyMatches && Array.isArray(bodyMatches)) {
 				JSONPaths[stepKey] = JSONPaths[stepKey].concat(bodyMatches)
@@ -125,7 +127,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 					JSONPaths[stepKey] = JSONPaths[stepKey].concat(headersMatches)
 				}
 			}
-	
+
 			if (i > 0) {
 				const previousStepKey = 'step_'+(i - 1)
 				if (typeof stepsResponse[previousStepKey] !== 'undefined' && typeof JSONPaths[stepKey] !== 'undefined') {
@@ -189,7 +191,8 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 			try {
 				const jsonResp = response.json()
 				if (jsonResp) {
-					stepsResponse[stepKey] = jsonResp
+					stepsResponse[stepKey] = jsonResp;
+					stepsHeader[stepKey] = response.headers;
 				}
 			} catch (e) {
 				stepsResponse[stepKey] = {
@@ -269,7 +272,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 
 			assertions[stepKey] = _assertions
 		}
-		console.log('###START->', {steps: stepsResponse, assertions: assertions}, '<-END###')
+		console.log('###START->', {steps: stepsResponse, assertions: assertions, headers: stepsHeader}, '<-END###')
 	}
 
 	`
