@@ -8,6 +8,7 @@ import (
 
 func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testStatus {
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
