@@ -15,13 +15,13 @@ require (
 )
 
 require (
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.16.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.10.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.5.0 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/likexian/gokit v0.25.15 // indirect
+	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
 require (
