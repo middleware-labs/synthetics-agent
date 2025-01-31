@@ -33,6 +33,63 @@ type CommandArgs struct {
 	TestId     string
 }
 
+type Browser struct {
+	UserAgent string `json:"user_agent"`
+}
+
+type Resolution struct {
+	Width    int  `json:"width"`
+	Height   int  `json:"height"`
+	IsMobile bool `json:"isMobile"`
+}
+
+type Device struct {
+	Resolution Resolution `json:"resolution"`
+	Browser    Browser    `json:"browser"`
+}
+
+type BrowserConfig struct {
+	Region string `json:"region"`
+	Device Device `json:"device"`
+}
+
+type TestSummary struct {
+	Total     int `json:"total"`
+	Completed int `json:"completed"`
+	Errors    int `json:"errors"`
+}
+
+type RumConfig struct {
+	Enabled     bool   `json:"enabled"`
+	ProjectName string `json:"projectName"`
+	ServiceName string `json:"serviceName"`
+	AccountKey  string `json:"accountKey"`
+	Target      string `json:"target"`
+	SessionID   string `json:"sessionId"`
+}
+
+type Failure struct {
+	Message string `json:"message"`
+}
+
+type TestResult struct {
+	Config            BrowserConfig `json:"config"`
+	TestSummary       TestSummary   `json:"test_summary"`
+	Status            string        `json:"status"`
+	TestDuration      int64         `json:"test_duration"`
+	RecordingURL      string        `json:"recordingUrl"`
+	ConsoleURL        string        `json:"consoleUrl"`
+	HARUrl            string        `json:"harUrl"`
+	TimeToInteractive float64       `json:"timeToInteractive"`
+	RumConfig         RumConfig     `json:"rumConfig"`
+	Failure           *Failure      `json:"failure,omitempty"`
+}
+
+type TestReport struct {
+	Steps      interface{} `json:"steps"`
+	TestResult TestResult  `json:"result"`
+}
+
 func NewBrowserChecker(c SyntheticCheck) *browserChecker {
 	return &browserChecker{
 		c:        c,
@@ -126,7 +183,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		return tStatus
 	}
 
-	var result map[string]interface{}
+	var result TestReport
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		tStatus.msg = "Failed to parse result"
@@ -137,39 +194,18 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 	checker.attrs.PutStr("check.test_report", string(body))
 
 	// Process the response status
-	testResult, ok := result["result"].(map[string]interface{})
-	if ok {
-		if configResult, ok := testResult["config"].(map[string]interface{}); ok {
-			if deviceResult, ok := configResult["device"].(map[string]interface{}); ok {
-				if browserResult, ok := deviceResult["browser"].(map[string]interface{}); ok {
-					checker.attrs.PutStr("check.device.browser.user_agent", browserResult["user_agent"].(string))
-				}
-				if resolutionResult, ok := deviceResult["resolution"].(map[string]interface{}); ok {
-					checker.attrs.PutInt("check.device.resolution.width", int64(resolutionResult["width"].(float64)))
-					checker.attrs.PutInt("check.device.resolution.height", int64(resolutionResult["height"].(float64)))
-					checker.attrs.PutBool("check.device.resolution.isMobile", resolutionResult["isMobile"].(bool))
-				}
-			}
-		}
-		if timeToInteractive, ok := testResult["timeToInteractive"].(float64); ok {
-			checker.attrs.PutInt("check.timeToInteractive", int64(timeToInteractive))
-		}
-		if testSummary, ok := testResult["test_summary"].(map[string]interface{}); ok {
-			checker.attrs.PutInt("check.steps.completed", int64(testSummary["completed"].(float64)))
-			checker.attrs.PutInt("check.steps.errors", int64(testSummary["errors"].(float64)))
-		}
-		if statusResult, ok := testResult["status"].(string); ok {
-			if statusResult == "FAILED" {
-				tStatus.status = testStatusFail
-				failureResult, ok := testResult["failure"].(map[string]interface{})
-				if ok {
-					tStatus.msg = failureResult["message"].(string)
-				}
-			}
-		}
-		if testDuration, ok := testResult["test_duration"].(float64); ok {
-			checker.attrs.PutInt("check.test_duration", int64(testDuration))
-		}
+	testResult := result.TestResult
+	checker.attrs.PutStr("check.device.browser.user_agent", testResult.Config.Device.Browser.UserAgent)
+	checker.attrs.PutInt("check.device.resolution.width", int64(testResult.Config.Device.Resolution.Width))
+	checker.attrs.PutInt("check.device.resolution.height", int64(testResult.Config.Device.Resolution.Height))
+	checker.attrs.PutBool("check.device.resolution.isMobile", testResult.Config.Device.Resolution.IsMobile)
+	checker.attrs.PutInt("check.timeToInteractive", int64(testResult.TimeToInteractive))
+	checker.attrs.PutInt("check.steps.completed", int64(testResult.TestSummary.Completed))
+	checker.attrs.PutInt("check.steps.errors", int64(testResult.TestSummary.Errors))
+	checker.attrs.PutInt("check.test_duration", testResult.TestDuration)
+	if testResult.Status == "FAILED" && testResult.Failure != nil {
+		tStatus.status = testStatusFail
+		tStatus.msg = testResult.Failure.Message
 	}
 
 	checker.timers["browser"] = timeInMs(time.Since(start))
