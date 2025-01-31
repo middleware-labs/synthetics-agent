@@ -135,7 +135,6 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 		return tStatus
 	}
 	checker.attrs.PutStr("check.test_report", string(body))
-	//TODO: verify what all attributes to be sent to clickhouse
 
 	// Process the response status
 	testResult, ok := result["result"].(map[string]interface{})
