@@ -154,6 +154,9 @@ func (cs *CheckState) finishCheckRequest(testStatus testStatus,
 	testId := strconv.Itoa(check.Id) + "-" +
 		cs.location + "-" +
 		strconv.Itoa(int(time.Now().UnixNano()))
+	if existingTestId, ok := attrs.Get("check.test_id"); ok {
+		testId = existingTestId.AsString()
+	}
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
 	rm := cs.getResourceMetrics()

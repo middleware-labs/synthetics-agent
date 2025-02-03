@@ -243,20 +243,48 @@ func (cs *CheckState) fire() error {
 
 	}
 
-	protocolChecker, err := getProtocolChecker(c)
-	if err != nil {
-		return err
-	}
+	if c.Proto == "browser" {
+		browserChecker := NewBrowserChecker(c)
+		browsers := c.Request.Browsers
+		var wg sync.WaitGroup
 
-	testStatus := protocolChecker.check()
-
-	isTestReq := c.CheckTestRequest.URL != ""
-	if isTestReq {
-		cs.finishTestRequest(protocolChecker.getTestResponseBody())
+		for browser, devices := range browsers {
+			wg.Add(1)
+			go func(browser string) {
+				defer wg.Done()
+				for _, device := range devices {
+					commandArgs := CommandArgs{
+						Browser:    browser,
+						CollectRum: true,
+						Device:     device,
+						Region:     c.Locations,
+						TestId:     fmt.Sprintf("%s-%s-%d-%s-%s", string(c.Uid), cs.location, time.Now().Unix(), browser, device),
+					}
+					browserChecker.CmdArgs = commandArgs
+					slog.Info("Test started. TestID: %s", slog.String("testId", commandArgs.TestId), browser, device)
+					testStatus := browserChecker.Check()
+					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
+					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)
+				}
+			}(browser)
+			wg.Wait()
+		}
 	} else {
-		cs.finishCheckRequest(testStatus,
-			protocolChecker.getTimers(),
-			protocolChecker.getAttrs())
+		protocolChecker, err := getProtocolChecker(c)
+		if err != nil {
+			return err
+		}
+
+		testStatus := protocolChecker.check()
+
+		isTestReq := c.CheckTestRequest.URL != ""
+		if isTestReq {
+			cs.finishTestRequest(protocolChecker.getTestResponseBody())
+		} else {
+			cs.finishCheckRequest(testStatus,
+				protocolChecker.getTimers(),
+				protocolChecker.getAttrs())
+		}
 	}
 
 	return nil

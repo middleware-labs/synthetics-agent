@@ -2,8 +2,9 @@
 package worker
 
 import (
-	"time"
+	"encoding/json"
 	"fmt"
+	"time"
 )
 
 type SyntheticsModel struct {
@@ -36,8 +37,8 @@ type CheckTestRequestHeaders struct {
 	CheckId       int    `json:"check_id"`
 }
 type CheckTestRequest struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
+	URL        string              `json:"url"`
+	Headers    map[string]string   `json:"headers"`
 }
 
 type SyntheticsExpectMeta struct {
@@ -47,6 +48,14 @@ type SyntheticsExpectMeta struct {
 
 	PacketLossLimit float64 `json:"packet_loss_limit,omitempty"`
 	LatencyLimit    float64 `json:"latency_limit,omitempty"`
+}
+
+type RUMConfig struct {
+	Enabled     bool   `json:"enabled"`
+	ProjectName string `json:"projectName"`
+	ServiceName string `json:"serviceName"`
+	AccountKey  string `json:"accountKey"`
+	Target      string `json:"target"`
 }
 
 type SyntheticsRequestOptions struct {
@@ -79,20 +88,29 @@ type SyntheticsRequestOptions struct {
 	StepTestIndex             int                     `json:"step_test_index"`
 	HTTPMultiTest             bool                    `json:"http_multi_test"`
 	HTTPMultiSteps            []HTTPMultiStepsOptions `json:"http_multi_steps"`
+	Browsers                  map[string][]string     `json:"browsers"`
+	Recording                 json.RawMessage         `json:"recording"`
+	RUMConfig                 RUMConfig               `json:"rumConfig"`
+	Timeout                   int                     `json:"waitTimeout"`
+	StepsCount                int                     `json:"stepsCount"`
+	TakeScreenshots           bool                    `json:"take_screenshots"`
+	Timezone                  string                  `json:"timezone"`
+	Language                  string                  `json:"language"`
+	DisableCors               bool                    `json:"disable_cors"`
+	DisableCSP                bool                    `json:"disable_csp"`
 }
-
 type HTTPMultiStepsRequest struct {
 	HTTPMethod  string               `json:"http_method"`
 	HTTPVersion string               `json:"http_version"`
 	HTTPHeaders []HTTPHeadersOptions `json:"http_headers"`
 	HTTPPayload HTTPPayloadOptions   `json:"http_payload"`
-	Assertions AssertionsOptions `json:"assertions"`;
+	Assertions  AssertionsOptions    `json:"assertions"`
 }
 
 type HTTPMultiStepsOptions struct {
-	StepName string               `json:"step_name"`
-	Endpoint string               `json:"endpoint"`
-	Expect   SyntheticsExpectMeta `json:"expect"`
+	StepName string                `json:"step_name"`
+	Endpoint string                `json:"endpoint"`
+	Expect   SyntheticsExpectMeta  `json:"expect"`
 	Request  HTTPMultiStepsRequest `json:"request"`
 }
 
@@ -135,28 +153,28 @@ type AwsSignature struct {
 	ServiceName     string `json:"service_name"`
 	SessionToken    string `json:"session_token"`
 }
-	
+
 type Oauth21 struct {
-		CredentialsType        string `json:"credentials_type"`
-		TokenAPIAuthentication string `json:"token_api_authentication"`
-		AccessTokenURL         string `json:"access_token_url"`
-		Username               string `json:"username"`
-		Password               string `json:"password"`
-		ClientID               string `json:"client_id"`
-		ClientSecret           string `json:"client_secret"`
-		Audience               string `json:"audience"`
-		Resource               string `json:"resource"`
-		Scopes                 string `json:"scopes"`
+	CredentialsType        string `json:"credentials_type"`
+	TokenAPIAuthentication string `json:"token_api_authentication"`
+	AccessTokenURL         string `json:"access_token_url"`
+	Username               string `json:"username"`
+	Password               string `json:"password"`
+	ClientID               string `json:"client_id"`
+	ClientSecret           string `json:"client_secret"`
+	Audience               string `json:"audience"`
+	Resource               string `json:"resource"`
+	Scopes                 string `json:"scopes"`
 }
 
 type Authentication struct {
 	ClientCertificate ClientCertificate `json:"client_certificate"`
-	Type  string `json:"type"`
-	Basic Basic `json:"basic"`
-	Digest Digest`json:"digest"`
-	Ntlm Ntlm `json:"ntlm"`
-	AwsSignature AwsSignature `json:"aws_signature"`
-	Oauth21 Oauth21`json:"oauth2_1"`
+	Type              string            `json:"type"`
+	Basic             Basic             `json:"basic"`
+	Digest            Digest            `json:"digest"`
+	Ntlm              Ntlm              `json:"ntlm"`
+	AwsSignature      AwsSignature      `json:"aws_signature"`
+	Oauth21           Oauth21           `json:"oauth2_1"`
 }
 
 type RequestBody struct {
@@ -173,7 +191,7 @@ type HTTPPayloadOptions struct {
 		Value string `json:"value"`
 	} `json:"query_params"`
 	RequestBody RequestBody `json:"request_body"`
-	Privacy struct {
+	Privacy     struct {
 		SaveBodyResponse bool `json:"save_body_response"`
 	} `json:"privacy"`
 	Proxy struct {
@@ -234,8 +252,8 @@ type SpecifyTimeRange struct {
 }
 
 type SpecifyFrequencyOptions struct {
-	Type             string `json:"type"`
-	IntervalType     string `json:"interval_type"`
+	Type             string           `json:"type"`
+	IntervalType     string           `json:"interval_type"`
 	SpecifyTimeRange SpecifyTimeRange `json:"specify_time_range"`
 }
 
