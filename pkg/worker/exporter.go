@@ -131,7 +131,7 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 
 	if !(resp.StatusCode >= 200 && resp.StatusCode <= 299) {
 		// Request is successful.
-		body, err := io.ReadAll(resp.Body)
+		_, err := io.ReadAll(resp.Body)
 		if err != nil {
 			slog.Error("error reading body",
 				slog.String("error", err.Error()))
@@ -141,9 +141,7 @@ func (cs *CheckState) exportProtoRequest(account string, tr pmetricotlp.ExportRe
 		slog.Error("error exporting items", slog.String("duration", time.Since(start).String()),
 			slog.String("endpoint", endpoint),
 			slog.Int("status", resp.StatusCode),
-			slog.String("body", string(body)),
-			slog.String("account key", cs.check.AccountKey),
-			slog.Any("check", cs.check))
+			slog.String("account key", cs.check.AccountKey))
 		return err
 	}
 	//slog.Infof("[Dur: %s] exported %s resources: %d scopes: %d metrics: %d account: %s  routines: %d", time.Since(start).String(), resp.Status, resources, scopes, metrics, account, runtime.NumGoroutine())
@@ -156,6 +154,9 @@ func (cs *CheckState) finishCheckRequest(testStatus testStatus,
 	testId := strconv.Itoa(check.Id) + "-" +
 		cs.location + "-" +
 		strconv.Itoa(int(time.Now().UnixNano()))
+	if existingTestId, ok := attrs.Get("check.test_id"); ok {
+		testId = existingTestId.AsString()
+	}
 	//log.Printf("testId %s finish %s status:%s err:%s endpoint:%s timers:%v attrs:%v", testId, c.Proto, status, errstr, c.Endpoint, timers, attrs.AsRaw())
 
 	rm := cs.getResourceMetrics()

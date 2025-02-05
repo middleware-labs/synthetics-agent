@@ -19,3 +19,11 @@
 
 # Go workspace file
 go.work
+
+# ide
+.vscode
+.idea
+node_modules/
+screenshots/
+chrome/
+firefox/

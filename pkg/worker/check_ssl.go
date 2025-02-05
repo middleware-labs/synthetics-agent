@@ -1,6 +1,8 @@
 package worker
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -16,6 +18,8 @@ import (
 const (
 	assertTypeSSLResponseTime string = "response_time"
 	assertTypeSSLCertificate  string = "certificate"
+	timeFormat                       = "2006-01-02T15:04:05.000Z"
+	defaultSslPort                   = "443"
 )
 
 type sslChecker struct {
@@ -27,6 +31,9 @@ type sslChecker struct {
 }
 
 func newSSLChecker(c SyntheticCheck) protocolChecker {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		c.Request.Port = defaultSslPort
+	}
 	return &sslChecker{
 		c: c,
 		timers: map[string]float64{
@@ -125,7 +132,7 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
-
+	testStatusMsg := make([]string, 0)
 	c := checker.c
 	for _, assert := range c.Request.Assertions.Ssl.Cases {
 
@@ -145,9 +152,9 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 
 			if !assertInt(expiryDays, assert) {
 				assertChecker["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, expiryDays))
 				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, expiry didn't matched, certificate expire in " +
-					strconv.FormatInt(expiryDays, 10) + " days"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				assertChecker["status"] = testStatusPass
 			}
@@ -158,10 +165,10 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 				" " + assert.Config.Value + " ms"
 			assertChecker["actual"] = strconv.FormatInt(int64(checker.timers["duration"]), 10) + " ms"
 			if !assertFloat(checker.timers["duration"], assert) {
-				testStatus.status = testStatusFail
-				testStatus.msg = "assert failed, response_time didn't matched"
-
 				assertChecker["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
+				testStatus.status = testStatusFail
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			} else {
 				assertChecker["status"] = testStatusPass
 			}
@@ -179,6 +186,8 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 // This function is part of the synthetics-agent package and is located in the check_ssl.go file.
 func (checker *sslChecker) check() testStatus {
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	host := checker.c.Endpoint + ":" + checker.c.Request.Port
 
 	testStatus := testStatus{
@@ -235,8 +244,13 @@ func (checker *sslChecker) check() testStatus {
 		}
 	}
 
+	sha1Fingerprint := sha1.Sum(cert.Raw)
+	sha256Fingerprint := sha256.Sum256(cert.Raw)
+
 	checker.attrs.PutBool("tls.is_ca", isCa)
-	checker.attrs.PutStr("check.details.fingerprint", fmt.Sprintf("%x", cert.Signature))
+	checker.attrs.PutStr("check.details.fingerprint_sha_1", formatFingerprint(sha1Fingerprint[:]))
+	checker.attrs.PutStr("check.details.fingerprint_sha_256", formatFingerprint(sha256Fingerprint[:]))
+	checker.attrs.PutStr("check.details.serial_number", formatSerialNumber(cert.SerialNumber.Bytes()))
 	checker.attrs.PutStr("check.details.not_valid_after", cert.NotAfter.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.not_valid_before", cert.NotBefore.Format(time.RFC3339))
 	checker.attrs.PutStr("check.details.cipher", tls.CipherSuiteName(conn.ConnectionState().CipherSuite))
@@ -247,7 +261,7 @@ func (checker *sslChecker) check() testStatus {
 
 	checker.testBody["issued_to"] = map[string]string{
 		"Alternative Name": strings.Join(cert.DNSNames, ", "),
-		"Common Name":      cert.Issuer.CommonName,
+		"Common Name":      cert.Subject.CommonName,
 	}
 	checker.testBody["issued_by"] = map[string]string{
 		"Common Name":  cert.Issuer.CommonName,
@@ -256,9 +270,11 @@ func (checker *sslChecker) check() testStatus {
 	}
 
 	checker.testBody["certificate"] = map[string]string{
-		"Fingerprint":      cert.SignatureAlgorithm.String(),
-		"Not Valid After":  cert.NotAfter.String(),
-		"Not Valid Before": cert.NotBefore.String(),
+		"Fingerprint SHA-1":   formatFingerprint(sha1Fingerprint[:]),
+		"Fingerprint SHA-256": formatFingerprint(sha256Fingerprint[:]),
+		"Not Valid After":     cert.NotAfter.Format(timeFormat),
+		"Not Valid Before":    cert.NotBefore.Format(timeFormat),
+		"Serial Number":       formatSerialNumber(cert.SerialNumber.Bytes()),
 	}
 
 	checker.testBody["connection"] = map[string]string{

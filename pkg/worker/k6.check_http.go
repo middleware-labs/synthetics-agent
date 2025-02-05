@@ -8,6 +8,7 @@ import (
 
 func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testStatus {
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
@@ -26,10 +27,11 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	if isCheckTestReq {
-		resSteps := response["steps"]
+		resSteps, resHeaders := response["steps"], response["headers"]
 		checker.testBody = map[string]interface{}{
 			"multiStepPreview": true,
 			"body":             resSteps,
+			"headers":          resHeaders,
 		}
 		// finishTestRequest(c, _testBody)
 		return testStatus
@@ -52,36 +54,49 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 			"status": testStatusFail,
 		})
 	} else {
-		if assertStep, ok := response["assertions"].(map[string]interface{}); ok {
+		if allAssertions, ok := response["assertions"].(map[string]interface{}); ok {
 			isfail := false
-			for _, assert := range assertStep {
-				newAsrt := make(map[string]string)
-				if asrt, ok1 := assert.(map[string]interface{}); ok1 {
-					for k, v := range asrt {
-						newAsrt[k] = fmt.Sprintf("%v", v)
-					}
-				} else {
-					if asrt, ok1 := assert.(map[string]string); ok1 {
-						for k, v := range asrt {
-							newAsrt[k] = fmt.Sprintf("%v", v)
+			stepNumber := 1
+			for _, assertions := range allAssertions {
+				isFirst := true
+				if assertList, ok := assertions.(map[string]interface{}); ok {
+					for _, assert := range assertList {
+						newAsrt := make(map[string]string)
+						if asrt, ok1 := assert.(map[string]interface{}); ok1 {
+							for k, v := range asrt {
+								newAsrt[k] = fmt.Sprintf("%v", v)
+							}
+						} else {
+							if asrt, ok1 := assert.(map[string]string); ok1 {
+								for k, v := range asrt {
+									newAsrt[k] = fmt.Sprintf("%v", v)
+								}
+							}
+						}
+						if isFirst {
+							newAsrt["step"] = fmt.Sprintf("Step%v", stepNumber)
+							isFirst = false
+							stepNumber++
+						}
+						checker.assertions = append(checker.assertions, newAsrt)
+						if newAsrt["status"] == testStatusFail && !isfail {
+							isfail = true
+							testStatus.status = testStatusFail
+							testStatus.msg = "one or more assertions failed, " + newAsrt["reason"]
 						}
 					}
 				}
-				checker.assertions = append(checker.assertions, newAsrt)
-				if newAsrt["status"] == testStatusFail && !isfail {
-					isfail = true
-					testStatus.status = testStatusFail
-					testStatus.msg = "one or more assertions failed, " + newAsrt["reason"]
-				}
 			}
 		} else {
-			for _, assert := range c.Request.Assertions.HTTP.Cases {
-				checker.assertions = append(checker.assertions, map[string]string{
-					"type":   assert.Type,
-					"reason": "should be " + assert.Config.Operator + " " + assert.Config.Value,
-					"actual": "N/A",
-					"status": testStatusFail,
-				})
+			for _, allallAssertions := range c.Request.HTTPMultiSteps {
+				for _, assert := range allallAssertions.Request.Assertions.HTTP.Cases {
+					checker.assertions = append(checker.assertions, map[string]string{
+						"type":   assert.Type,
+						"reason": "should be " + assert.Config.Operator + " " + assert.Config.Value,
+						"actual": "N/A",
+						"status": testStatusFail,
+					})
+				}
 			}
 		}
 	}

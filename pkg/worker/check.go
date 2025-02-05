@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -13,6 +14,10 @@ import (
 	"log/slog"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
+)
+
+const (
+	errCheckNotAllowedToRun = "not allowed to run at this time"
 )
 
 type SyntheticCheck struct {
@@ -46,7 +51,7 @@ func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 		httpChecker, err := newHTTPChecker(c)
 		return httpChecker, err
 	case "tcp":
-		return newTCPChecker(c), nil
+		return newTCPChecker(c)
 	case "dns":
 		return newDNSChecker(c), nil
 	case "ping":
@@ -60,14 +65,14 @@ func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
 	case "ssl":
 		return newSSLChecker(c), nil
 	case "udp":
-		return newUDPChecker(c), nil
+		return newUDPChecker(c)
 	case "web_socket":
 		return newWSChecker(c), nil
 	case "grpc":
-		return newGRPCChecker(c), nil
+		return newGRPCChecker(c)
 	}
 
-	return nil, nil
+	return nil, errors.New("no case matched")
 }
 
 func assertString(data string, assert CaseOptions) bool {
@@ -81,7 +86,7 @@ func assertString(data string, assert CaseOptions) bool {
 	if assert.Config.Operator == "contains" && !strings.Contains(data, assert.Config.Value) {
 		return false
 	}
-	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains") && strings.Index(data, assert.Config.Value) >= 0 {
+	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Index(data, assert.Config.Value) >= 0 {
 		return false
 	}
 
@@ -113,6 +118,9 @@ func assertInt(data int64, assert CaseOptions) bool {
 	if assert.Config.Operator == "greater_than" && data <= in {
 		return false
 	}
+	if assert.Config.Operator == "is_not" && data == in {
+		return false
+	}
 	return true
 }
 
@@ -130,6 +138,9 @@ func assertFloat(data float64, assert CaseOptions) bool {
 	if assert.Config.Operator == "greater_than" && data <= in {
 		return false
 	}
+	if assert.Config.Operator == "is_not" && data == in {
+		return false
+	}
 	return true
 }
 
@@ -144,16 +155,21 @@ func percentCalc(val float64, percent float64) float64 {
 
 func (cs *CheckState) testFire() (map[string]interface{}, error) {
 	protocolChecker, err := getProtocolChecker(cs.check)
-	var resp map[string]interface{}
-	if err == nil {
-		protocolChecker.check()
-		resp = protocolChecker.getTestResponseBody()
+	if err != nil {
+		return nil, err
 	}
-	return resp, err
+	var resp map[string]interface{}
+	protocolChecker.check()
+	resp = protocolChecker.getTestResponseBody()
+	return resp, nil
 }
+
 func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 
 	protocolChecker, err := getProtocolChecker(cs.check)
+	if err != nil {
+		return nil, err
+	}
 
 	testStatus := protocolChecker.check()
 	timers := protocolChecker.getTimers()
@@ -163,10 +179,10 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 		"testStatus": testStatus,
 		"timers":     timers,
 		"attr":       attr.AsRaw(),
-	}, err
+	}, nil
 }
 
-func (cs *CheckState) fire() {
+func (cs *CheckState) fire() error {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
@@ -177,50 +193,101 @@ func (cs *CheckState) fire() {
 		}
 	}()
 
-	if c.Request.SpecifyFrequency.Type == "advanced" &&
-		c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
+	if c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
 		if err != nil {
-			allow = false
-			return
+			return err
 		}
 		today := strings.ToLower(time.Now().In(loc).Weekday().String())
-
 		for _, day := range c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek {
 			if day == today {
 				allow = true
 			}
 		}
-		if allow {
-			start, err := time.ParseInLocation("15:04", c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime, loc)
 
-			if err != nil || time.Now().In(loc).UTC().Unix() < start.UTC().Unix() {
-				return
-			}
-			end, err := time.ParseInLocation("15:04", c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime, loc)
+		if !allow {
+			return fmt.Errorf("check %d: %s, current day %s, allowed days %v", cs.check.Id,
+				errCheckNotAllowedToRun, today,
+				c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek)
+		}
 
-			if err != nil || time.Now().In(loc).UTC().Unix() > end.UTC().Unix() {
-				return
-			}
+		currentDate := time.Now().In(loc)
+		timeFormat := "2006-01-02 15:04"
+
+		startTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
+			c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime)
+		start, err := time.ParseInLocation(timeFormat, startTimeAppendDate, loc)
+		if err != nil {
+			return err
+		}
+		currentUnixTime := currentDate.UTC().Unix()
+		startUnixTime := start.UTC().Unix()
+		if currentUnixTime < startUnixTime {
+			return fmt.Errorf("check %d: %s, current time %d < start time %d", cs.check.Id,
+				errCheckNotAllowedToRun, currentUnixTime, startUnixTime)
+		}
+
+		endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
+			c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
+		end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
+		if err != nil {
+			return err
+		}
+
+		endUnixTime := end.UTC().Unix()
+		if currentUnixTime > endUnixTime {
+			return fmt.Errorf("check %d: %s, current time %d > end time %d", cs.check.Id,
+				errCheckNotAllowedToRun, currentUnixTime, endUnixTime)
+		}
+
+	}
+
+	if c.Proto == "browser" {
+		browserChecker := NewBrowserChecker(c)
+		browsers := c.Request.Browsers
+		var wg sync.WaitGroup
+
+		for browser, devices := range browsers {
+			wg.Add(1)
+			go func(browser string) {
+				defer wg.Done()
+				for _, device := range devices {
+					commandArgs := CommandArgs{
+						Browser:    browser,
+						CollectRum: true,
+						Device:     device,
+						Region:     c.Locations,
+						TestId:     fmt.Sprintf("%s-%s-%d-%s-%s", string(c.Uid), cs.location, time.Now().Unix(), browser, device),
+					}
+					browserChecker.CmdArgs = commandArgs
+					slog.Info("Test started. TestID: %s", slog.String("testId", commandArgs.TestId), browser, device)
+					testStatus := browserChecker.Check()
+					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
+					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)
+				}
+			}(browser)
+			wg.Wait()
+		}
+	} else {
+		protocolChecker, err := getProtocolChecker(c)
+		if err != nil {
+			return err
+		}
+
+		testStatus := protocolChecker.check()
+
+		isTestReq := c.CheckTestRequest.URL != ""
+		if isTestReq {
+			cs.finishTestRequest(protocolChecker.getTestResponseBody())
+		} else {
+			cs.finishCheckRequest(testStatus,
+				protocolChecker.getTimers(),
+				protocolChecker.getAttrs())
 		}
 	}
 
-	protocolChecker, err := getProtocolChecker(c)
-	if err != nil {
-		return
-	}
-
-	testStatus := protocolChecker.check()
-
-	isTestReq := c.CheckTestRequest.URL != ""
-	if isTestReq {
-		cs.finishTestRequest(protocolChecker.getTestResponseBody())
-	} else {
-		cs.finishCheckRequest(testStatus,
-			protocolChecker.getTimers(),
-			protocolChecker.getAttrs())
-	}
+	return nil
 }
 
 type CheckState struct {
@@ -306,12 +373,14 @@ func (cs *CheckState) update() {
 	fireIn := time.Duration(interval-(diff%interval)) * time.Millisecond
 
 	intervalDuration := time.Duration(c.IntervalSeconds) * time.Second
-
-	slog.Info("next fire in", slog.String("interval", intervalDuration.String()),
+	slog.Info("code change next fire in", slog.String("interval", intervalDuration.String()),
 		slog.String("fireIn", fireIn.String()))
 
 	if c.CheckTestRequest.URL != "" {
-		cs.fire()
+		err := cs.fire()
+		if err != nil {
+			slog.Error("error firing", slog.String("error", err.Error()))
+		}
 		//RemoveCheck(c.check)
 		return
 	}
@@ -326,7 +395,8 @@ func (cs *CheckState) update() {
 		firingLock.Unlock()
 
 		if !lock.TryLock() {
-			slog.Info("not allowed to run twice at same time")
+			slog.Info("not allowed to run twice at same time", slog.Int("id", c.Id),
+				slog.String("Uid", c.Uid))
 			return
 		}
 
@@ -341,7 +411,10 @@ func (cs *CheckState) update() {
 			log.Printf("------------------")
 		}*/
 
-		cs.fire()
+		err := cs.fire()
+		if err != nil {
+			slog.Error("error firing", slog.String("error", err.Error()))
+		}
 
 		firingLock.Lock()
 		lock.Unlock()

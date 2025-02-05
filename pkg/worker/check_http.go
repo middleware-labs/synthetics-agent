@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -105,8 +106,9 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if c.Request.HTTPPayload.Authentication.Type == "basic" &&
 		c.Request.HTTPPayload.Authentication.Basic.Username != "" &&
 		c.Request.HTTPPayload.Authentication.Basic.Password != "" {
-		req.Header.Set("Authorization", c.Request.HTTPPayload.Authentication.Basic.Username+
-			":"+c.Request.HTTPPayload.Authentication.Basic.Password)
+		auth := c.Request.HTTPPayload.Authentication.Basic.Username + ":" + c.Request.HTTPPayload.Authentication.Basic.Password
+		encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
+		req.Header.Set("Authorization", "Basic "+encodedAuth)
 	}
 
 	if digest && c.Request.HTTPPayload.Authentication.Type == "digest" &&
@@ -127,7 +129,7 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 				respauth.StatusCode, http.StatusUnauthorized)
 		}
 		parts := digestParts(respauth)
-		parts["uri"] = c.Endpoint
+		parts["uri"] = req.URL.RequestURI()
 		parts["method"] = c.Request.HTTPMethod
 		parts["username"] = c.Request.HTTPPayload.Authentication.Digest.Username
 		parts["password"] = c.Request.HTTPPayload.Authentication.Digest.Password
@@ -145,7 +147,7 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 func digestParts(resp *http.Response) map[string]string {
 	result := map[string]string{}
 	if len(resp.Header["Www-Authenticate"]) > 0 {
-		wantedHeaders := []string{"nonce", "realm", "qop"}
+		wantedHeaders := []string{"nonce", "realm", "qop", "opaque"}
 		responseHeaders := strings.Split(resp.Header["Www-Authenticate"][0], ",")
 		for _, r := range responseHeaders {
 			for _, w := range wantedHeaders {
@@ -295,7 +297,7 @@ func (checker *httpChecker) getHTTPTraceClientTrace() *httptrace.ClientTrace {
 	}
 }
 
-func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	assertions["reason"] = "should be " + assert.Config.Operator +
 		" " + assert.Config.Value
@@ -305,7 +307,7 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]
 
 	if !assertString(body, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, body didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, body))
 
 		assertions["status"] = testStatusFail
 		assertions["actual"] = "Not Matched"
@@ -314,10 +316,10 @@ func getHTTPTestCaseBodyAssertions(body string, assert CaseOptions) (map[string]
 		assertions["actual"] = "Matched"
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
-func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -344,16 +346,16 @@ func getHTTPTestCaseBodyHashAssertions(body string, assert CaseOptions) (map[str
 	assertions["actual"] = hash
 	if !assertString(hash, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "body hash didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, hash))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
-func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[string]string, testStatus) {
+func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -363,18 +365,16 @@ func getHTTPTestCaseHeaderAssertions(header string, assert CaseOptions) (map[str
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertString(header, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, header (" +
-			assert.Config.Target + ")  didn't matched"
-
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, header))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
-	assert CaseOptions) (map[string]string, testStatus) {
+	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 	testStatus := testStatus{
 		status: testStatusOK,
@@ -384,16 +384,16 @@ func getHTTPTestCaseResponseTimeAssertions(responseTime float64,
 	assertions["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
 	if !assertFloat(responseTime, assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, response_time didn't matched"
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, responseTime))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func getHTTPTestCaseStatusCodeAssertions(statusCode int,
-	assert CaseOptions) (map[string]string, testStatus) {
+	assert CaseOptions, testStatusMsg []string) (map[string]string, testStatus, []string) {
 	assertions := make(map[string]string)
 
 	testStatus := testStatus{
@@ -405,19 +405,19 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 		" " + assert.Config.Value
 	if !assertInt(int64(statusCode), assert) {
 		testStatus.status = testStatusFail
-		testStatus.msg = "assert failed, status_code didn't matched (" +
-			assert.Config.Value + ") but got " + http.StatusText(statusCode)
+		testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, statusCode))
 		assertions["status"] = testStatusFail
 	} else {
 		assertions["status"] = testStatusPass
 	}
 
-	return assertions, testStatus
+	return assertions, testStatus, testStatusMsg
 }
 
 func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
 
 	tStatus := testStatus{
 		status: testStatusOK,
@@ -462,16 +462,10 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 
 	js, _ := json.Marshal(checker.timestamps)
 	checker.attrs.PutStr("checkpoints", string(js))
-	bss := string(bs)
-	// todo: tmp disabled reason: memory full on large responses
-	//if c.Request.HTTPPayload.Privacy.SaveBodyResponse {
-	//	attrs.PutStr("check.response.body", bss)
-	//}
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	checker.testBody["tookMs"] = fmt.Sprintf("%v ms", checker.timers["duration"])
-	checker.testBody["body"] = bss
 	checker.testBody["statusCode"] = resp.StatusCode
 
 	hdr := make(map[string]string)
@@ -483,36 +477,46 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	checker.testBody["headers"] = hdr
 
 	checker.attrs.PutStr("check.details.body_size",
-		fmt.Sprintf("%d KB\n", len(bs)/1024))
-	//attrs.PutStr("check.details.body_raw", fmt.Sprintf("%d", string(bs)))
+		fmt.Sprintf("%.4f KB\n", float64(len(bs))/1024.0))
+
+	contentType := hdr["Content-Type"]
+	bss := string(bs)
+	if strings.Contains(contentType, "application/json") {
+		checker.testBody["body"] = bss
+		if !c.Request.HTTPPayload.Privacy.SaveBodyResponse {
+			checker.attrs.PutStr("check.details.body_raw", bss)
+		}
+	}
 
 	var checkHttp200 = true
+	testStatusMsg := make([]string, 0)
 	for _, assert := range c.Request.Assertions.HTTP.Cases {
+		assert.Config.Value = strings.TrimSpace(assert.Config.Value)
 		var testAssertions map[string]string
 		var assertStatus testStatus
 		switch assert.Type {
 		case assertTypeHTTPBody:
-			testAssertions, assertStatus = getHTTPTestCaseBodyAssertions(bss, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyAssertions(bss, assert, testStatusMsg)
 
 		case assertTypeHTTPBodyHash:
-			testAssertions, assertStatus = getHTTPTestCaseBodyHashAssertions(bss, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyHashAssertions(bss, assert, testStatusMsg)
 
 		case assertTypeHTTPHeader:
 			assertHeader := resp.Header.Get(assert.Config.Target)
-			testAssertions, assertStatus = getHTTPTestCaseHeaderAssertions(assertHeader, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseHeaderAssertions(assertHeader, assert, testStatusMsg)
 
 		case assertTypeHTTPResponseTime:
 			responseTime := checker.timers["duration"]
-			testAssertions, assertStatus = getHTTPTestCaseResponseTimeAssertions(responseTime, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseResponseTimeAssertions(responseTime, assert, testStatusMsg)
 
 		case assertTypeHTTPStatusCode:
 			checkHttp200 = false
-			testAssertions, assertStatus = getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert)
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseStatusCodeAssertions(resp.StatusCode, assert, testStatusMsg)
 		}
 
 		if assertStatus.status != testStatusOK {
 			tStatus.status = testStatusFail
-			tStatus.msg = "one or more test cases failed"
+			tStatus.msg = strings.Join(testStatusMsg, "; ")
 		}
 
 		assertChecker := map[string]string{
@@ -530,8 +534,8 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	if checkHttp200 && !(resp.StatusCode >= http.StatusOK &&
 		resp.StatusCode < http.StatusMultipleChoices /*300*/) {
 		tStatus.status = testStatusFail
-		tStatus.msg = "response code is not 2XX, received response code: " +
-			strconv.Itoa(resp.StatusCode)
+		testStatusMsg = append(testStatusMsg, "response code is not 2XX, received response code: "+strconv.Itoa(resp.StatusCode))
+		tStatus.msg = strings.Join(testStatusMsg, ", ")
 	}
 
 	checker.processHTTPResponse()
@@ -581,5 +585,8 @@ func getDigestAuthrization(digestParts map[string]string) string {
 	response := getMD5(fmt.Sprintf("%s:%s:%v:%s:%s:%s", ha1, d["nonce"], nonceCount, cnonce, d["qop"], ha2))
 	authorization := fmt.Sprintf(`Digest username="%s", realm="%s", nonce="%s", uri="%s", cnonce="%s", nc="%v", qop="%s", response="%s"`,
 		d["username"], d["realm"], d["nonce"], d["uri"], cnonce, nonceCount, d["qop"], response)
+	if opaque, ok := d["opaque"]; ok {
+		authorization += fmt.Sprintf(`, opaque="%s"`, opaque)
+	}
 	return authorization
 }

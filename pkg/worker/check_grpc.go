@@ -3,14 +3,16 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/jhump/protoreflect/grpcreflect"
 	grpccheckerhelper "github.com/middleware-labs/synthetics-agent/pkg/worker/grpc-checker"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-	"os"
-	"strings"
-	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"google.golang.org/grpc/metadata"
@@ -48,7 +50,10 @@ type grpcChecker struct {
 	attrs        pcommon.Map
 }
 
-func newGRPCChecker(c SyntheticCheck) protocolChecker {
+func newGRPCChecker(c SyntheticCheck) (protocolChecker, error) {
+	if strings.TrimSpace(c.Request.Port) == "" {
+		return nil, errors.New("port is required for GRPC checks")
+	}
 	return &grpcChecker{
 		c:          c,
 		respStr:    "",
@@ -56,7 +61,7 @@ func newGRPCChecker(c SyntheticCheck) protocolChecker {
 		testBody:   make(map[string]interface{}),
 		assertions: make([]map[string]string, 0),
 		attrs:      pcommon.NewMap(),
-	}
+	}, nil
 }
 
 func (checker *grpcChecker) fillGRPCAssertions() testStatus {
@@ -64,6 +69,7 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	testStatusMsg := make([]string, 0)
 
 	for _, assert := range c.Request.Assertions.GRPC.Cases {
 		ck := map[string]string{
@@ -78,8 +84,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = fmt.Sprintf("%v", checker.timers["duration"])
 			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
 				testStatus.status = testStatusFail
-				testStatus.msg = "duration did not match with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 			checker.assertions = append(checker.assertions, ck)
 
@@ -87,8 +94,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = checker.respStr
 			if !assertString(checker.respStr, assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.respStr))
 				testStatus.status = testStatusFail
-				testStatus.msg = "response message didn't matched with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 
 			checker.assertions = append(checker.assertions, ck)
@@ -98,8 +106,9 @@ func (checker *grpcChecker) fillGRPCAssertions() testStatus {
 			ck["actual"] = actual
 			if !assertString(actual, assert) {
 				ck["status"] = testStatusFail
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, actual))
 				testStatus.status = testStatusFail
-				testStatus.msg = "metadata message did not match with the condition"
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
 			checker.assertions = append(checker.assertions, ck)
 		}
@@ -129,7 +138,7 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 	if err != nil {
 		t := testStatus{
 			status: testStatusError,
-			msg: err.Error(),
+			msg:    err.Error(),
 		}
 		checker.testBody["error"] = t.msg
 		checker.processGRPCError(t, checker.c)
@@ -138,7 +147,7 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
 		t := testStatus{
 			status: testStatusFail,
-			msg: fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String()),
+			msg:    fmt.Sprintf("service unhealthy (responded with %q)", resp.GetStatus().String()),
 		}
 		checker.testBody["error"] = t.msg
 		checker.processGRPCError(t, checker.c)
@@ -150,9 +159,9 @@ func (checker *grpcChecker) healthCheckGRPC(ctx context.Context, cc *grpc.Client
 }
 func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.ClientConn) testStatus {
 	var (
-		refClient *grpcreflect.Client
+		refClient   *grpcreflect.Client
 		reflections = make(map[string]interface{}, 0)
-		cnts = time.Now()
+		cnts        = time.Now()
 		addlHeaders = make([]string, 0)
 		reflHeaders = make([]string, 0)
 	)
@@ -177,7 +186,7 @@ func (checker *grpcChecker) reflectionCheckGRPC(ctx context.Context, cc *grpc.Cl
 	if err != nil {
 		t := testStatus{
 			status: testStatusError,
-			msg: err.Error(),
+			msg:    err.Error(),
 		}
 		checker.processGRPCError(t, checker.c)
 		return t
@@ -271,7 +280,6 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 	}
 	defer reset()
 
-
 	if symbol == "" {
 		_, err := descSource.FindSymbol(symbol)
 		if err != nil {
@@ -289,7 +297,7 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 
 	var messageReader *strings.Reader
 	if c.Request.GRPCPayload.Message != "" {
-		messageReader = strings.NewReader(fmt.Sprintf("%s", c.Request.GRPCPayload.Message))
+		messageReader = strings.NewReader(c.Request.GRPCPayload.Message)
 	}
 
 	options := grpccheckerhelper.FormatOptions{
@@ -314,9 +322,8 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 		Out:            os.Stdout,
 		Formatter:      formatter,
 		VerbosityLevel: 0,
-		ConnectStart: _d0,
+		ConnectStart:   _d0,
 	}
-
 
 	invoke := grpccheckerhelper.DynamicInvokeRPC(ctx, descSource, cc, symbol, append(addlHeaders, rpcHeaders...), h, rf.Next)
 
@@ -333,7 +340,6 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 		t.msg = invoke.Error.Error()
 		t.status = testStatusError
 
-		checker.testBody["body"] = t.msg
 		checker.testBody["error"] = t.msg
 
 		checker.processGRPCError(t, checker.c)
@@ -345,9 +351,10 @@ func (checker *grpcChecker) behaviourCheckGRPC(ctx context.Context, cc *grpc.Cli
 }
 func (checker *grpcChecker) check() testStatus {
 	c := checker.c
+	_start := time.Now()
+	checker.attrs.PutInt("check.created_at", _start.UnixMilli())
 	ctx, cnlFnc := context.WithCancel(context.Background())
 	defer cnlFnc()
-	_start := time.Now()
 
 	clientGRPC, err := grpccheckerhelper.NewClientGRPC(ctx, grpccheckerhelper.ClientDialOptions{
 		Target:      fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
@@ -406,6 +413,7 @@ func (checker *grpcChecker) getAttrs() pcommon.Map {
 func (checker *grpcChecker) getTestResponseBody() map[string]interface{} {
 
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
+	checker.testBody["request"] = checker.c.Request.GRPCPayload.Message
 	if checker.testBody["body"] == "" && checker.respStr != "" {
 		checker.testBody["body"] = checker.respStr
 	}

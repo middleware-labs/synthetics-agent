@@ -3,10 +3,10 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -16,23 +16,7 @@ type k6Scripter interface {
 
 type defaultK6Scripter struct{}
 
-func readStdoutPipeLines(pipe io.Reader) ([]byte, error) {
-	var outputBytes []byte
-	buf := make([]byte, 1024)
-	for {
-		n, err := pipe.Read(buf)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-		if n == 0 {
-			break
-		}
-		outputBytes = append(outputBytes, buf[:n]...)
-	}
-	return outputBytes, nil
-}
-
-func findValueToPattern(input string, pattern string) string {
+func findValueToPattern(input string, pattern string) (string, error) {
 	val := ""
 	re := regexp.MustCompile(pattern)
 	match := re.FindStringSubmatch(string(input))
@@ -41,9 +25,7 @@ func findValueToPattern(input string, pattern string) string {
 	}
 	re = regexp.MustCompile(`\\/"`)
 	val = re.ReplaceAllString(val, `"`)
-	re1 := regexp.MustCompile(`\\"`)
-	val = re1.ReplaceAllString(val, `"`)
-	return val
+	return strconv.Unquote("\"" + val + "\"")
 }
 
 func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, error) {
@@ -63,39 +45,13 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 	}
 
 	cmd := exec.Command("k6", "run", temp.Name())
-
-	stdoutPipe, outErr := cmd.StdoutPipe()
-	if outErr != nil {
-		return "", fmt.Errorf("error creating stdout pipe: %s", outErr.Error())
-	}
-	stderrPipe, stdErr := cmd.StderrPipe()
-	if stdErr != nil {
-		return "", fmt.Errorf("error creating stderr pipe: %s", stdErr.Error())
-	}
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("error starting k6 command: %s", err.Error())
-	}
-
-	outputBytes, err := readStdoutPipeLines(stdoutPipe)
+	outputBytes, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("error reading stdout: %s", err.Error())
-	}
-	errorOutputBytes, err := readStdoutPipeLines(stderrPipe)
-	if err != nil {
-		return "", fmt.Errorf("error reading stderr: %s", err.Error())
+		return "", fmt.Errorf("error executing k6 script: %s", err.Error())
 	}
 
-	// Wait for the k6 command to finish.
-	if wErr := cmd.Wait(); wErr != nil {
-		return "", fmt.Errorf("k6 command finished with error: %s", err.Error())
-	}
-
-	pattern1 := `###START->([^=]+)<-END###`
-	respValue := findValueToPattern(string(errorOutputBytes), pattern1)
-	if respValue == "" {
-		respValue = findValueToPattern(string(outputBytes), pattern1)
-	}
+	pattern1 := `###START->(.*?)<-END###`
+	return findValueToPattern(string(outputBytes), pattern1)
 
 	//pattern2 := `###OTHER_START->([^=]+)<-OTHER_START###`
 	//other := findValueToPattern(string(errorOutputBytes), pattern2)
@@ -103,8 +59,6 @@ func (k6Scripter *defaultK6Scripter) execute(scriptSnippet string) (string, erro
 	//
 	//fmt.Println("other--->", other)
 	//fmt.Println("other2--->", other2)
-
-	return respValue, nil
 }
 
 func CreateScriptSnippet(req SyntheticCheck) string {
@@ -113,7 +67,8 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 
 	import http from 'k6/http';
 	import { check, sleep } from "k6";
-	
+	import encoding from 'k6/encoding';
+
 	function accessJsonValue(jsonData, path) {
 		try {
 			const keys = path.split('.');
@@ -131,7 +86,6 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 		}
 	}
 
-	const asserts = [] //##STEPS_ASSERTIONS 
 	const steps = [] //##MULTI_STEPS 
 
 	export default function () {
@@ -139,16 +93,9 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 		const pattern = /{{\$(\d+)\.(.*?)}}/g
 		const JSONPaths = {}
 		const stepsResponse = {}
-		const _assertions = {}
-		for (const assert of asserts) {
-			_assertions[assert.type] = {
-				"type":   assert.type,
-				"reason": assert.type.replace('_', ' ') + ' ' + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
-				"actual": "N/A",
-				"status": 'FAIL',
-			}
-		}
-	
+		const stepsHeader = {}
+		const assertions = {}
+
 		for (let i = 0; i < steps.length; i++) {
 			const stepKey = 'step_' + i
 			const step = steps[i]
@@ -159,6 +106,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 			const endpointMatches = step.endpoint.match(pattern)
 			JSONPaths[stepKey] = endpointMatches && Array.isArray(endpointMatches) ? endpointMatches : []
 			stepsResponse[stepKey] = {}
+			stepsHeader[stepKey] = {}
 			const bodyMatches = step.request.http_payload.request_body.match(pattern)
 			if (bodyMatches && Array.isArray(bodyMatches)) {
 				JSONPaths[stepKey] = JSONPaths[stepKey].concat(bodyMatches)
@@ -179,7 +127,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 					JSONPaths[stepKey] = JSONPaths[stepKey].concat(headersMatches)
 				}
 			}
-	
+
 			if (i > 0) {
 				const previousStepKey = 'step_'+(i - 1)
 				if (typeof stepsResponse[previousStepKey] !== 'undefined' && typeof JSONPaths[stepKey] !== 'undefined') {
@@ -212,27 +160,57 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 					}
 				}
 			}
-	
+			if (step.request.http_payload.authentication.type === 'basic' && step.request.http_payload.authentication.basic.username !== '' && step.request.http_payload.authentication.basic.password !== '') {
+				const credentials = step.request.http_payload.authentication.basic.username + ':' + step.request.http_payload.authentication.basic.password
+				const encodedCredentials = encoding.b64encode(credentials)
+				headers['Authorization'] = 'Basic ' + encodedCredentials
+			}
+
+			const cookies = {};
+			const cookieHeaders = step.request.http_payload.cookies;
+
+			for (let k = 0; k < cookieHeaders.length; k++) {
+				const headerVal = cookieHeaders[k].trim();
+				const cookieParts = headerVal.split('\t').join('').split('\n').join('').split('\r');
+				const [cName, cValue] = cookieParts[0].split('=');
+				cookies[cName] = cValue;
+			}
+
+			const requestOptions = {
+				headers: headers,
+				cookies: cookies,
+			}
+
 			const response = http.request(
 				step.request.http_method,
 				endpoint,
 				body,
-				{ headers: headers }
+				requestOptions
 			)
 
 			try {
 				const jsonResp = response.json()
 				if (jsonResp) {
-					stepsResponse[stepKey] = jsonResp
+					stepsResponse[stepKey] = jsonResp;
+					stepsHeader[stepKey] = response.headers;
 				}
 			} catch (e) {
 				stepsResponse[stepKey] = {
-					"error": "An error occurred while parsing the response body",
-					"message": "The response should be a valid JSON object",
+					"status_code": response.status,
+					"response_time": String(response.timings.duration) + 'ms',
+					"message": "Response body is not json object",
 				}
 			}
-			
-			for (const assert of asserts) {
+			const _assertions = {}
+			for (const assert of step.request.assertions) {
+				_assertions[assert.type] = {
+					"type":   assert.type,
+					"reason": assert.type.replace('_', ' ') + ' ' + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
+					"actual": "N/A",
+					"status": 'FAIL',
+				}
+			}
+			for (const assert of step.request.assertions) {
 				if (assert.type === 'status_code') {
 					const _op = assert.config.operator
 					const _vl = parseInt(assert.config.value)
@@ -250,7 +228,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 						sOk = check(response, {
 							['status contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) > -1,
 						})
-					} else if (_op === "not_contains") {
+					} else if (_op === "not_contains" || _op === "does_not_contain") {
 						sOk = check(response, {
 							['status not contains' + assert.config.value]: (r) => (r.status + '').indexOf(_vl) === -1,
 						})
@@ -269,7 +247,6 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 						isfail = true
 						_assertions[assert.type].status = "FAIL"
 						_assertions[assert.type].reason = "assert failed, " + assert.type.replace('_', '') + " didn't matched"
-						break
 					}
 				} else if (assert.type === 'response_time') {
 					_assertions[assert.type].actual = response.timings.duration
@@ -289,16 +266,13 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 						isfail = true
 						_assertions[assert.type].status = "FAIL"
 						_assertions[assert.type].reason = "assert failed, " + assert.type.replace('_', '') + " didn't matched"
-						break
 					}
 				}
         	}
 
-			if (isfail) {
-				break
-			}
+			assertions[stepKey] = _assertions
 		}
-		console.log('###START->', {steps: stepsResponse, assertions: _assertions}, '<-END###')
+		console.log('###START->', {steps: stepsResponse, assertions: assertions, headers: stepsHeader}, '<-END###')
 	}
 
 	`
@@ -311,9 +285,12 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				"http_method":  step.Request.HTTPMethod,
 				"http_headers": step.Request.HTTPHeaders,
 				"http_payload": map[string]interface{}{
-					"type":         step.Request.HTTPPayload.RequestBody.Type,
-					"request_body": step.Request.HTTPPayload.RequestBody.Content,
+					"type":           step.Request.HTTPPayload.RequestBody.Type,
+					"request_body":   step.Request.HTTPPayload.RequestBody.Content,
+					"authentication": step.Request.HTTPPayload.Authentication,
+					"cookies":        step.Request.HTTPPayload.Cookies,
 				},
+				"assertions": step.Request.Assertions.HTTP.Cases,
 			},
 		})
 	}
@@ -321,9 +298,6 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 	if len(steps) > 0 {
 		stepsJson, _ := json.Marshal(steps)
 		k6Script = strings.ReplaceAll(k6Script, "[] //##MULTI_STEPS", ""+string(stepsJson))
-
-		assert, _ := json.Marshal(req.Request.Assertions.HTTP.Cases)
-		k6Script = strings.ReplaceAll(k6Script, "[] //##STEPS_ASSERTIONS", ""+string(assert))
 	}
 
 	return k6Script

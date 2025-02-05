@@ -5,23 +5,29 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/likexian/whois"
+	whoisparser "github.com/likexian/whois-parser"
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
 
 const (
-	assertTypeDNSResponseTime         = "response_time"
-	assertTypeDNSEveryAvailableRecord = "every_available_record"
-	assertTypeDNSAtLeastOneRecord     = "at_least_one_record"
+	assertTypeDNSResponseTime             = "response_time"
+	assertTypeDNSEveryAvailableRecord     = "every_available_record"
+	assertTypeDNSAtLeastOneRecord         = "at_least_one_record"
+	assertTypeDNSDomainRegistrationExpiry = "domain_registration_expiry"
 )
 
 var (
 	errEmptyTXTRecord   = errors.New("zero TXT records found")
 	errEmptyNSRecord    = errors.New("zero NS records found")
 	errEmptyCNAMERecord = errors.New("zero CNAME records found")
+	errExpiryNotSet     = errors.New("expiration date is not set")
 )
 
 const (
@@ -31,6 +37,8 @@ const (
 	dnsRecordTypeNS    = "NS"
 	dnsRecordTypeMX    = "MX"
 	dnsRecordTypeCNAME = "CNAME"
+	defaultDnsServer   = "8.8.8.8"
+	defaultDnsPort     = "53"
 )
 
 var recordTypeToLookupFn = map[string]func(context.Context,
@@ -160,13 +168,14 @@ func lookupCNAME(ctx context.Context, endpoint string,
 }
 
 type dnsChecker struct {
-	c          SyntheticCheck
-	lookup     []map[string]string
-	resolver   resolver
-	timers     map[string]float64
-	testBody   map[string]interface{}
-	assertions []map[string]string
-	attrs      pcommon.Map
+	c                 SyntheticCheck
+	lookup            []map[string]string
+	resolver          resolver
+	timers            map[string]float64
+	testBody          map[string]interface{}
+	assertions        []map[string]string
+	attrs             pcommon.Map
+	domainExpiryStore *DomainExpiryCache
 }
 
 func newDNSChecker(c SyntheticCheck) protocolChecker {
@@ -179,6 +188,12 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 				d := net.Dialer{
 					Timeout: time.Second,
 				}
+				if strings.TrimSpace(c.Request.DNSServer) == "" {
+					c.Request.DNSServer = defaultDnsServer
+				}
+				if strings.TrimSpace(c.Request.Port) == "" {
+					c.Request.Port = defaultDnsPort
+				}
 				return d.DialContext(ctx, network, c.Request.DNSServer+":"+c.Request.Port)
 			},
 		},
@@ -190,8 +205,9 @@ func newDNSChecker(c SyntheticCheck) protocolChecker {
 			"assertions": make([]map[string]interface{}, 0),
 			"tookMs":     "0 ms",
 		},
-		assertions: make([]map[string]string, 0),
-		attrs:      pcommon.NewMap(),
+		assertions:        make([]map[string]string, 0),
+		attrs:             pcommon.NewMap(),
+		domainExpiryStore: GetDomainExpiryStoreInstance(),
 	}
 }
 
@@ -200,20 +216,10 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
+	testStatusMsg := make([]string, 0)
 
 	ctx := context.Background()
 	for _, assert := range c.Request.Assertions.DNS.Cases {
-
-		if testStatus.status == testStatusFail {
-			checker.assertions = append(checker.assertions, map[string]string{
-				"type":   assert.Type,
-				"reason": testStatus.msg,
-				"actual": "N/A",
-				"status": testStatusFail,
-			})
-			continue
-		}
-
 		ck := make(map[string]string)
 		switch assert.Type {
 		case assertTypeDNSResponseTime:
@@ -223,9 +229,11 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 			ck["reason"] = "response time assertion passed"
 			if !assertFloat(checker.timers["duration"], assert) {
 				ck["status"] = testStatusFail
-				ck["reason"] = "response time assertion failed"
+				ck["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got value %v)", assert.Type, assert.Config.Operator, assert.Config.Value, checker.timers["duration"]))
+				testStatus.status = testStatusFail
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
 			}
-			ck["status"] = testStatusOK
 
 		case assertTypeDNSEveryAvailableRecord:
 			fallthrough
@@ -255,6 +263,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while looking up CNAME record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up CNAME record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatus.status = testStatusError
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
 					records = append(records, cnames...)
 				}
@@ -264,6 +275,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while resolving MX record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while resolving MX record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatus.status = testStatusError
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
 					records = append(records, mxHosts...)
 				}
@@ -273,6 +287,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["reason"] = "Error while looking up NS record"
 					ck["status"] = testStatusFail
 					ck["actual"] = fmt.Sprintf("%v", err)
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up NS record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatus.status = testStatusError
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
 					records = append(records, nsHosts...)
 				}
@@ -282,6 +299,9 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 					ck["status"] = testStatusFail
 					ck["reason"] = "Error while looking up TXT record"
 					ck["actual"] = fmt.Sprintf("%v", err)
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed, error while looking up TXT record: %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, err))
+					testStatus.status = testStatusError
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				} else {
 					records = append(records, txtHosts...)
 				}
@@ -315,25 +335,51 @@ func (checker *dnsChecker) fillAssertions(ips []net.IP) testStatus {
 				} else {
 					ck["status"] = testStatusFail
 					if ck["reason"] == "" {
-						ck["reason"] = "assertion failed"
+						ck["reason"] = "assertion failed with " + strings.Join(records, ",")
 					}
 
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s %s assertion failed with %s", assert.Type, assert.Config.Operator, assert.Config.Target, assert.Config.Value, strings.Join(records, ",")))
 					testStatus.status = testStatusFail
-					testStatus.msg = "assertion failed with " + strings.Join(records, ",")
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
 				}
 			}
 
 			if !every && !match {
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed with no record matched with given condition (%s)", assert.Type, assert.Config.Operator, assert.Config.Value, strings.Join(records, ",")))
 				testStatus.status = testStatusFail
-				testStatus.msg = "no record matched with given condition " + strings.Join(records, ",")
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
+				ck["status"] = testStatusFail
+				ck["reason"] = assert.Type + " assertion failed with " + strings.Join(records, ",")
+			}
+		case assertTypeDNSDomainRegistrationExpiry:
+			ck["type"] = assert.Type
+			ck["status"] = testStatusOK
+			expiry, err := checker.getDNSExpiry()
+			if err != nil {
+				slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err.Error()))
+				ck["status"] = testStatusError
+				ck["reason"] = "Error while getting domain expiration"
+				ck["actual"] = "N/A"
+				testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s failed, error while geting the domain expiry: %s, ", assert.Type, assert.Config.Operator, assert.Config.Value, err))
+				testStatus.status = testStatusError
+				testStatus.msg = strings.Join(testStatusMsg, "; ")
+			} else {
+				ck["actual"] = strconv.Itoa(expiry)
+				ck["reason"] = "domain registration expiry assertion passed"
+				if !assertFloat(float64(expiry), assert) {
+					ck["status"] = testStatusFail
+					ck["reason"] = "should be " + assert.Config.Operator + " " + assert.Config.Value
+					testStatusMsg = append(testStatusMsg, fmt.Sprintf("%s %s %s assertion failed (got domain expiration %v)", assert.Type, assert.Config.Operator, assert.Config.Value, expiry))
+					testStatus.status = testStatusFail
+					testStatus.msg = strings.Join(testStatusMsg, "; ")
+				}
 			}
 		}
 		checker.assertions = append(checker.assertions, ck)
 	}
 	return testStatus
 }
-func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.IP) {
-
+func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.IP) {
 	c := checker.c
 	ctx := context.Background()
 
@@ -357,6 +403,33 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 				"value":    fmt.Sprintf("%v", percentCalc(checker.timers["duration"], 4)),
 			},
 		},
+	}
+
+	domainExpiry, err := checker.getDNSExpiry()
+	if err != nil {
+		slog.Error("error while geting domain expiry time", slog.String("domain", checker.c.Endpoint), slog.Any("err", err.Error()))
+		if errors.Is(err, errExpiryNotSet) {
+			checker.testBody["domainExpiryError"] = errExpiryNotSet.Error()
+		} else {
+			checker.testBody["domainExpiryError"] = err.Error()
+		}
+		checker.testBody["domainExpiry"] = ""
+	} else {
+		assertVal := domainExpiry
+		if domainExpiry > 15 {
+			assertVal = 15
+		}
+		asr = append(asr, map[string]interface{}{
+			"type": assertTypeDNSDomainRegistrationExpiry,
+			"config": map[string]string{
+				"operator": "greater_than",
+				"value":    fmt.Sprintf("%v", assertVal),
+			},
+		})
+
+		// set the expiry in testbody
+		checker.testBody["domainExpiryError"] = ""
+		checker.testBody["domainExpiry"] = domainExpiry
 	}
 
 	for _, v := range ips {
@@ -403,12 +476,13 @@ func (checker *dnsChecker) processDNSResponse(testStatus testStatus, ips []net.I
 	checker.testBody["headers"] = checker.lookup
 	checker.testBody["assertions"] = asr
 	checker.testBody["tookMs"] = fmt.Sprintf("%.2f ms", checker.timers["duration"])
-	//checker.testBody = testBody
 }
 
 func (checker *dnsChecker) check() testStatus {
 	c := checker.c
 	start := time.Now()
+	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+
 	testStatus := testStatus{
 		status: testStatusOK,
 		msg:    "",
@@ -421,7 +495,7 @@ func (checker *dnsChecker) check() testStatus {
 		testStatus.status = testStatusFail
 		testStatus.msg = fmt.Sprintf("error resolving dns: %v", err)
 		checker.timers["duration"] = timeInMs(time.Since(start))
-		checker.processDNSResponse(testStatus, ips)
+		checker.processDNSResponse(&testStatus, ips)
 		return testStatus
 	}
 
@@ -432,7 +506,7 @@ func (checker *dnsChecker) check() testStatus {
 	checker.attrs.PutStr("resolve.ips", strings.Join(ipss, "\n"))
 
 	checker.timers["duration"] = timeInMs(time.Since(start))
-	checker.processDNSResponse(testStatus, ips)
+	checker.processDNSResponse(&testStatus, ips)
 	return testStatus
 }
 
@@ -446,4 +520,45 @@ func (checker *dnsChecker) getAttrs() pcommon.Map {
 
 func (checker *dnsChecker) getTestResponseBody() map[string]interface{} {
 	return checker.testBody
+}
+
+func (checker *dnsChecker) getDNSExpiry() (int, error) {
+	cacheKey := checker.c.Id
+	if entry, found := checker.domainExpiryStore.GetCache(cacheKey); found {
+		if time.Since(entry.Timestamp) < 24*time.Hour {
+			return entry.ExpiryDays, nil
+		}
+	}
+
+	rawWhoisData, err := whois.Whois(checker.c.Endpoint)
+	if err != nil {
+		return 0, err
+	}
+
+	// Parse the WHOIS data
+	parsedData, err := whoisparser.Parse(rawWhoisData)
+	if err != nil {
+		return 0, err
+	}
+
+	/*
+		Positive: If the domain's expiration date is in the future, indicating how much time is left until it expires.
+		Zero: If the expiration date is exactly now or if it’s not set.
+		Negative: If the expiration date is in the past, indicating that the domain has already expired.
+	*/
+	if parsedData.Domain.ExpirationDateInTime.IsZero() {
+		return 0, errExpiryNotSet
+	}
+
+	expiryDuration := parsedData.Domain.ExpirationDateInTime.Sub(time.Now().Local())
+	expiryDays := int(expiryDuration.Hours() / 24) // duration -> days
+
+	// Update the cache
+	checker.domainExpiryStore.AddOrUpdateCache(cacheKey, CacheEntry{
+		ExpiryDays: expiryDays,
+		Timestamp:  time.Now(),
+	})
+
+	slog.Info("fetched expiry", slog.String("domain", checker.c.Endpoint), slog.Int("expiryDays", expiryDays))
+	return expiryDays, nil
 }

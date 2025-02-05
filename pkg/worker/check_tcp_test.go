@@ -12,15 +12,15 @@ type mockNetter struct {
 	err error
 }
 
-func (n *mockNetter) lookupIP(host string) ([]net.IP, error) {
+func (n *mockNetter) LookupIP(host string) ([]net.IP, error) {
 	return n.ips, n.err
 }
 
-func (n *mockNetter) dialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+func (n *mockNetter) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
 	return nil, nil
 }
 
-func (n *mockNetter) connClose(conn net.Conn) error {
+func (n *mockNetter) ConnClose(conn net.Conn) error {
 	return nil
 }
 
@@ -29,7 +29,7 @@ func TestTCPCheck(t *testing.T) {
 	tests := []struct {
 		name       string
 		c          SyntheticCheck
-		netter     netter
+		netter     Netter
 		want       testStatus
 		wantErrMsg string
 	}{
@@ -151,10 +151,14 @@ func TestTCPCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checker := newTCPChecker(tt.c).(*tcpChecker)
-			checker.netter = tt.netter
+			checker, err := newTCPChecker(tt.c)
+			if err != nil {
+				t.Fatalf("Expected no error, but got: %v", err)
+			}
+			tcpChecker, _ := checker.(*tcpChecker)
+			tcpChecker.netter = tt.netter
 
-			got := checker.check()
+			got := tcpChecker.check()
 			if got.status != tt.want.status {
 				t.Fatalf("Expected status to be %s, but got %s", tt.want.status, got.status)
 			}
@@ -163,7 +167,7 @@ func TestTCPCheck(t *testing.T) {
 				t.Fatalf("Expected msg to be %s, but got %s", tt.want.msg, got.msg)
 			}
 
-			connErr, ok := checker.attrs.Get("connection.error")
+			connErr, ok := tcpChecker.attrs.Get("connection.error")
 			if ok && connErr.AsString() != tt.wantErrMsg {
 				t.Fatalf("Expected connection.error to be '%s', but got '%s'",
 					tt.wantErrMsg, connErr.AsString())

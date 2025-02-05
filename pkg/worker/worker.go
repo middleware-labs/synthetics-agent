@@ -11,14 +11,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"log/slog"
 
 	"github.com/middleware-labs/synthetics-agent/pkg/ws"
 )
-
-var messages map[string]*ws.Msg = make(map[string]*ws.Msg)
 
 var (
 	errInvalidMode = errors.New("invalid mode passed")
@@ -59,6 +58,9 @@ type Worker struct {
 	pulsarClient *ws.Client
 	topic        string
 	_checks      map[string]*CheckState
+	consumer     ws.Consumer
+	messages     map[string]*ws.Msg
+	messagesLock sync.Mutex
 }
 
 // New creates a new worker
@@ -82,6 +84,7 @@ func New(cfg *Config) (*Worker, error) {
 		cfg:          cfg,
 		pulsarClient: ws.New(cfg.PulsarHost),
 		topic:        topic,
+		messages:     make(map[string]*ws.Msg),
 		_checks:      make(map[string]*CheckState),
 	}, nil
 }
@@ -128,7 +131,6 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 		err = json.Unmarshal(msg.Payload, &v)
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
-			continue
 		}
 
 		err = consumer.Ack(context.Background(), msg)
@@ -137,10 +139,11 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 		}
 
 		if v.Not != w.cfg.Hostname {
-			_, ok := messages[msg.Key]
+			omsg, ok := w.GetMessage(msg.Key)
 			if ok {
 				slog.Info("unsubscribed", slog.String("key", msg.Key))
-				delete(messages, msg.Key)
+				w.DeleteMessage(msg.Key)
+				w.consumer.Ack(context.Background(), omsg)
 			}
 			w.removeCheckState(&SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
@@ -150,10 +153,24 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 				},
 			})
 		}
-
 	}
 }
-
+func (w *Worker) GetMessage(key string) (*ws.Msg, bool) {
+	w.messagesLock.Lock()
+	defer w.messagesLock.Unlock()
+	msg, ok := w.messages[key]
+	return msg, ok
+}
+func (w *Worker) DeleteMessage(key string) {
+	w.messagesLock.Lock()
+	defer w.messagesLock.Unlock()
+	delete(w.messages, key)
+}
+func (w *Worker) SetMessage(key string, msg *ws.Msg) {
+	w.messagesLock.Lock()
+	defer w.messagesLock.Unlock()
+	w.messages[key] = msg
+}
 func (w *Worker) DirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getTestState(v)
 	return checkState.testFire()
@@ -171,17 +188,17 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	slog.Info("subscribing to topic", slog.String("url", url),
 		slog.String("consumer", consumerName), slog.String("token", token))
 
-	consumer, err := w.pulsarClient.Consumer("persistent/public/default/"+topic,
+	var err error
+	w.consumer, err = w.pulsarClient.Consumer("persistent/public/default/"+topic,
 		"subscribe", ws.Params{
-			"subscriptionType":           "Key_Shared",
-			"ackTimeoutMillis":           "20000",
+			"subscriptionType":           "Shared",
+			"ackTimeoutMillis":           strconv.Itoa(60 * 60 * 1000),
 			"consumerName":               consumerName,
-			"negativeAckRedeliveryDelay": "30000",
+			"negativeAckRedeliveryDelay": "0",
 			"pullMode":                   "false",
-			"receiverQueueSize":          "2000",
+			"receiverQueueSize":          "500000",
 			"token":                      token,
 		})
-
 	if err != nil {
 		slog.Error("failed to subscribe",
 			slog.String("error", err.Error()))
@@ -194,9 +211,9 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	ctx := context.Background()
 
 	for {
-		msg, err := consumer.Receive(ctx)
+		msg, err := w.consumer.Receive(ctx)
 		if err != nil {
-			consumer.Close()
+			w.consumer.Close()
 
 			timer := time.NewTimer(time.Second * 5)
 			<-timer.C
@@ -204,7 +221,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			return
 		} else if msg.Payload == nil || len(msg.Payload) == 0 {
 			slog.Info("null message recved", slog.String("msgId", msg.MsgId))
-			consumer.Ack(context.Background(), msg)
+			w.consumer.Ack(context.Background(), msg)
 			continue
 		}
 
@@ -213,6 +230,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		err = json.Unmarshal(msg.Payload, &v)
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
+			w.consumer.Ack(context.Background(), msg)
 			continue
 		}
 
@@ -222,22 +240,19 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 
 		if v.Action != "update" && v.Action != "delete" {
 			slog.Info("invalid action message", slog.String("payload", string(msg.Payload)))
-			err := consumer.Ack(context.Background(), msg)
+			err := w.consumer.Ack(context.Background(), msg)
 			if err != nil {
 				slog.Error("failed to ack message", slog.String("error", err.Error()))
 			}
 			continue
 		}
+		oldMsg, ok := w.GetMessage(msg.Key)
 
-		_, ok := messages[msg.Key]
-		refresh := false
-
-		if ok && messages[msg.Key].MsgId == msg.MsgId {
-			refresh = true
-			//log.Printf("[%d] job refresh key:%s ", v.Id, msg.Key)
-		} else if ok && messages[msg.Key].MsgId != msg.MsgId {
+		if ok && oldMsg.MsgId == msg.MsgId {
+			slog.Info(fmt.Sprintf("[%d] job refresh key:%s ", v.Id, msg.Key))
+		} else if ok && oldMsg.MsgId != msg.MsgId {
 			slog.Info("job update", slog.String("key", msg.Key))
-			err := consumer.Ack(context.Background(), messages[msg.Key])
+			err := w.consumer.Ack(context.Background(), oldMsg)
 			if err != nil {
 				slog.Error("failed to ack message", slog.String("error", err.Error()))
 			}
@@ -252,46 +267,45 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		}
 
 		if v.Action == "update" {
-			messages[msg.Key] = msg
-
+			w.SetMessage(msg.Key, msg)
 			if v.CheckTestRequest.URL != "" {
-				// ack  check-type requests.
-				err := consumer.Ack(context.Background(), msg)
+				err := w.consumer.Ack(context.Background(), msg)
 				if err != nil {
 					slog.Error("ack msg failed", slog.String("error", err.Error()))
 				}
-			} else {
-				err := consumer.Nack(context.Background(), msg)
-				if err != nil {
-					slog.Error("nack msg failed", slog.String("error", err.Error()))
-				}
 			}
 
-			if !refresh {
-				if v.CheckTestRequest.URL == "" {
-					// let others subscriber unsuscribe...
-					w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
-						Not:        w.cfg.Hostname,
-						Action:     "unsub",
-						Id:         v.Id,
-						AccountUID: v.AccountUID,
-					})
-				}
-				checkState := w.getCheckState(v)
-				checkState.update()
+			//if !refresh {
+			if v.CheckTestRequest.URL == "" {
+				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
+					Not:        w.cfg.Hostname,
+					Action:     "unsub",
+					Id:         v.Id,
+					AccountUID: v.AccountUID,
+				})
 			}
+			checkState := w.getCheckState(v)
+			checkState.update()
+			//}
 			continue
 		}
 
 		// handle delete
-		delete(messages, msg.Key)
-		err = consumer.Ack(context.Background(), msg)
+		w.DeleteMessage(msg.Key)
+
+		w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
+			Not:        w.cfg.Hostname,
+			Action:     "unsub",
+			Id:         v.Id,
+			AccountUID: v.AccountUID,
+		})
+
+		err = w.consumer.Ack(context.Background(), msg)
 		if err != nil {
 			slog.Error("failed to ack the msg", slog.String("error", err.Error()))
 		}
 		slog.Info("job removed", slog.String("key", msg.Key))
 		w.removeCheckState(&v)
-
 	}
 }
 
