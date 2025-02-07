@@ -385,7 +385,7 @@ func (cs *CheckState) update() {
 		return
 	}
 
-	cs.timerStop = TimerNew(func() {
+	execute := func() {
 		firingLock.Lock()
 
 		if _, ok := firing[c.Uid]; !ok {
@@ -422,5 +422,13 @@ func (cs *CheckState) update() {
 		firingLock.Unlock()
 
 		//c.update(txnId, nil)
-	}, fireIn, intervalDuration)
+	}
+
+	diffUp := time.Now().UTC().Sub(c.UpdatedAt.UTC())
+	if diffUp <= 30*time.Second {
+		slog.Info("Updated triggering now.", slog.Int("testId", c.Id), slog.String("nextFireIn", fireIn.String()))
+		execute()
+	}
+
+	cs.timerStop = TimerNew(execute, fireIn, intervalDuration)
 }
