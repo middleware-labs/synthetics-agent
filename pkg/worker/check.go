@@ -247,6 +247,7 @@ func (cs *CheckState) fire() error {
 		browserChecker := NewBrowserChecker(c)
 		browsers := c.Request.Browsers
 		var wg sync.WaitGroup
+		captureEndpoint := strings.ReplaceAll(cs.captureEndpoint, "{ACC}", c.Uid)
 
 		for browser, devices := range browsers {
 			wg.Add(1)
@@ -254,17 +255,17 @@ func (cs *CheckState) fire() error {
 				defer wg.Done()
 				for _, device := range devices {
 					commandArgs := CommandArgs{
-						Browser:    browser,
-						CollectRum: true,
-						Device:     device,
-						Region:     c.Locations,
-						TestId:     fmt.Sprintf("%s-%s-%d-%s-%s", string(c.Uid), cs.location, time.Now().Unix(), browser, device),
+						CaptureEndpoint: captureEndpoint,
+						Browser:         browser,
+						CollectRum:      true,
+						Device:          device,
+						Region:          c.Locations,
+						TestId:          fmt.Sprintf("%s-%s-%d-%s-%s", string(c.Uid), cs.location, time.Now().Unix(), browser, device),
 					}
 					browserChecker.CmdArgs = commandArgs
 					slog.Info("Test started. TestID: %s", slog.String("testId", commandArgs.TestId), browser, device)
-					testStatus := browserChecker.Check()
-					cs.finishCheckRequest(testStatus, browserChecker.getTimers(), browserChecker.getAttrs())
-					slog.Info("Test completed & exported to clickhouse. TestID: %s, TestStatus: [%s,%s]", slog.String("testId", commandArgs.TestId), testStatus.status, testStatus.msg)
+					_ = browserChecker.Check()
+					slog.Info("Test invoked. TestID: %s", slog.String("testId", commandArgs.TestId))
 				}
 			}(browser)
 			wg.Wait()
