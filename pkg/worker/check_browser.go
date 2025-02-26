@@ -111,7 +111,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 		"region":                   args.Region,
 		"testId":                   args.TestId,
 		"captureEndpoint":          args.CaptureEndpoint,
-		"accountUID":               checker.c.AccountUID,
+		"projectUID":               checker.c.AccountUID,
 		"id":                       checker.c.Id,
 		"accountKey":               checker.c.AccountKey,
 		"proto":                    checker.c.Proto,
@@ -136,7 +136,7 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 	}
 
 	payload := map[string]interface{}{
-		"args":  cmdArgs,
+		"args": cmdArgs,
 	}
 
 	url := os.Getenv("BROWSER_HUB_URL")
