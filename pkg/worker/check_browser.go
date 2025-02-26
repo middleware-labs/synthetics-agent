@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
@@ -26,11 +26,12 @@ func (checker *browserChecker) getTimers() map[string]float64 {
 }
 
 type CommandArgs struct {
-	Browser    string
-	CollectRum bool
-	Device     string
-	Region     string
-	TestId     string
+	CaptureEndpoint string
+	Browser         string
+	CollectRum      bool
+	Device          string
+	Region          string
+	TestId          string
 }
 
 type Browser struct {
@@ -103,28 +104,17 @@ func (checker *browserChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
-func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
-	start := time.Now()
-
-	tStatus := testStatus{
-		status: testStatusOK,
-	}
-	checker.attrs.PutStr("check.test_id", args.TestId)
-	checker.attrs.PutInt("check.created_at", start.UnixMilli())
-	checker.attrs.PutStr("check.device.browser.type", args.Browser)
-	checker.attrs.PutInt("check.run_type", 0)
-	checker.attrs.PutStr("check.type", "browser")
-	checker.attrs.PutStr("check.device.id", args.Device)
-	checker.attrs.PutInt("check.steps.total", int64(checker.c.Request.StepsCount))
-	checker.attrs.PutInt("check.steps.completed", 0)
-	checker.attrs.PutInt("check.steps.errors", 0)
-	checker.attrs.PutInt("check.test_duration", 0)
-
+func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 	cmdArgs := map[string]interface{}{
 		"browser":                  args.Browser,
 		"device":                   args.Device,
 		"region":                   args.Region,
 		"testId":                   args.TestId,
+		"captureEndpoint":          args.CaptureEndpoint,
+		"projectUID":               checker.c.AccountUID,
+		"id":                       checker.c.Id,
+		"accountKey":               checker.c.AccountKey,
+		"proto":                    checker.c.Proto,
 		"url":                      checker.c.Endpoint,
 		"recording":                checker.c.Request.Recording,
 		"screenshots":              checker.c.Request.TakeScreenshots,
@@ -151,69 +141,36 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) testStatus {
 
 	url := os.Getenv("BROWSER_HUB_URL")
 	if url == "" {
-		tStatus.status = testStatusError
-		tStatus.msg = "BROWSER_HUB_URL environment variable not set"
-		checker.timers["browser"] = timeInMs(time.Since(start))
-		return tStatus
+		slog.Error("BROWSER_HUB_URL environment variable not set")
+		return
 	}
 
 	// Make the HTTP POST request
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		tStatus.status = testStatusError
-		tStatus.msg = "Failed to marshal payload"
-		checker.timers["browser"] = timeInMs(time.Since(start))
-		return tStatus
+		slog.Error("Failed to marshal payload")
+		return
 	}
 
 	resp, err := http.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		tStatus.status = testStatusError
-		tStatus.msg = fmt.Sprintf("HTTP request failed: %v", err)
-		checker.timers["browser"] = timeInMs(time.Since(start))
-		return tStatus
+		slog.Error("HTTP request failed", slog.String("error", err.Error()))
+		return
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		tStatus.status = testStatusError
-		tStatus.msg = "Failed to read response body"
-		checker.timers["browser"] = timeInMs(time.Since(start))
-		return tStatus
+	if resp.StatusCode == http.StatusOK {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			slog.Error(err.Error())
+		}
+		bodyString := string(bodyBytes)
+		slog.Info(bodyString)
 	}
-
-	var result TestReport
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		tStatus.msg = "Failed to parse result"
-		tStatus.status = testStatusError
-		checker.timers["browser"] = timeInMs(time.Since(start))
-		return tStatus
-	}
-	checker.attrs.PutStr("check.test_report", string(body))
-
-	// Process the response status
-	testResult := result.TestResult
-	checker.attrs.PutStr("check.device.browser.user_agent", testResult.Config.Device.Browser.UserAgent)
-	checker.attrs.PutInt("check.device.resolution.width", int64(testResult.Config.Device.Resolution.Width))
-	checker.attrs.PutInt("check.device.resolution.height", int64(testResult.Config.Device.Resolution.Height))
-	checker.attrs.PutBool("check.device.resolution.isMobile", testResult.Config.Device.Resolution.IsMobile)
-	checker.attrs.PutInt("check.timeToInteractive", int64(testResult.TimeToInteractive))
-	checker.attrs.PutInt("check.steps.completed", int64(testResult.TestSummary.Completed))
-	checker.attrs.PutInt("check.steps.errors", int64(testResult.TestSummary.Errors))
-	checker.attrs.PutInt("check.test_duration", testResult.TestDuration)
-	if testResult.Status == "FAILED" && testResult.Failure != nil {
-		tStatus.status = testStatusFail
-		tStatus.msg = testResult.Failure.Message
-	}
-
-	checker.timers["browser"] = timeInMs(time.Since(start))
-	return tStatus
 }
 
 func (checker *browserChecker) Check() testStatus {
 	args := checker.CmdArgs
-	testStatus := checker.runBrowserTest(args)
-	return testStatus
+	checker.runBrowserTest(args)
+	return testStatus{}
 }
