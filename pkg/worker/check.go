@@ -247,7 +247,7 @@ func (cs *CheckState) fire() error {
 		browserChecker := NewBrowserChecker(c)
 		browsers := c.Request.Browsers
 		var wg sync.WaitGroup
-		captureEndpoint := strings.ReplaceAll(cs.captureEndpoint, "{ACC}", c.Uid)
+		captureEndpoint := strings.ReplaceAll(cs.captureEndpoint, "{ACC}", c.AccountUID)
 
 		for browser, devices := range browsers {
 			for _, device := range devices {
