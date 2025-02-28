@@ -335,7 +335,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},
@@ -361,7 +361,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},
@@ -387,7 +387,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},
@@ -413,7 +413,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},
@@ -439,7 +439,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},
@@ -465,7 +465,7 @@ func TestUDPCheck(t *testing.T) {
 						},
 					},
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 5,
+						ResponseTimeLessThan: 5,
 					},
 				},
 			},

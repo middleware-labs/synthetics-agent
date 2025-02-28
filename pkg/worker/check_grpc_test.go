@@ -141,7 +141,7 @@ func (m *mockHealthClient) Watch(ctx context.Context,
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 10,
+						ResponseTimeLessThan: 10,
 					},
 					Request: SyntheticsRequestOptions{
 						GRPCPayload: GRPCPayloadOptions{
@@ -168,7 +168,7 @@ func (m *mockHealthClient) Watch(ctx context.Context,
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 10,
+						ResponseTimeLessThan: 10,
 					},
 					Request: SyntheticsRequestOptions{
 						GRPCPayload: GRPCPayloadOptions{
@@ -197,7 +197,7 @@ func (m *mockHealthClient) Watch(ctx context.Context,
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 10,
+						ResponseTimeLessThan: 10,
 					},
 					Request: SyntheticsRequestOptions{
 						GRPCPayload: GRPCPayloadOptions{

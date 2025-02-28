@@ -222,7 +222,7 @@ func (checker *icmpChecker) check() testStatus {
 
 	conn, tmErr := checker.netter.DialTimeout("icmp", addr[0].String()+
 		":"+checker.c.Request.Port,
-		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
+		time.Duration(checker.c.Expect.ResponseTimeLessThan)*time.Second)
 	if tmErr != nil {
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
 		testStatus.status = testStatusError
@@ -283,11 +283,11 @@ func (checker *icmpChecker) check() testStatus {
 	if c.Expect.LatencyLimit > 0 && c.Expect.LatencyLimit <= checker.timers["rtt"] {
 		// TODO revisit testStatusFailed
 		testStatus.status = testStatusFail
-		testStatus.msg = fmt.Sprintf("latency higher then expected %s", c.Endpoint)
+		testStatus.msg = fmt.Sprintf("latency higher than expected %s", c.Endpoint)
 	} else if c.Expect.PacketLossLimit > 0 && c.Expect.PacketLossLimit <= stats.PacketLoss {
 		// TODO revisit testStatusFailed
 		testStatus.status = testStatusFail
-		testStatus.msg = fmt.Sprintf("packet loss higher then expected %s", c.Endpoint)
+		testStatus.msg = fmt.Sprintf("packet loss higher than expected %s", c.Endpoint)
 	}
 	testStatusMsg := make([]string, 0)
 	for _, v := range c.Request.Assertions.ICMP.Cases {
@@ -339,7 +339,7 @@ func (checker *icmpChecker) processICMPTTL(addr []net.IP, lcErr error) testStatu
 	if checker.c.Request.TTL {
 		if len(addr) > 0 {
 			traceRouter := newTraceRouteChecker(addr[0],
-				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
+				checker.c.Expect.ResponseTimeLessThan, checker.timers, checker.attrs)
 			tStatus := traceRouter.check()
 			traceRouter.getAttrs().CopyTo(checker.attrs)
 

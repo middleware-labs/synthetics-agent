@@ -358,7 +358,7 @@ func (checker *grpcChecker) check() testStatus {
 
 	clientGRPC, err := grpccheckerhelper.NewClientGRPC(ctx, grpccheckerhelper.ClientDialOptions{
 		Target:      fmt.Sprintf("%s:%s", c.Endpoint, c.Request.Port),
-		TimeoutSec:  float64(c.Expect.ResponseTimeLessThen),
+		TimeoutSec:  float64(c.Expect.ResponseTimeLessThan),
 		Certificate: c.Request.GRPCPayload.Certificate,
 		PrivateKey:  c.Request.GRPCPayload.PrivateKey,
 		IgnoreCert:  c.Request.GRPCPayload.IgnoreServerCertificateError,

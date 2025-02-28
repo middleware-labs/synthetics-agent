@@ -187,12 +187,12 @@ func getHTTPClient(c SyntheticCheck) httpClient {
 			ForceAttemptHTTP2: c.Request.HTTPVersion == "HTTP/2",
 			DisableKeepAlives: false,
 			MaxIdleConns:      10,
-			TLSHandshakeTimeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThen*1000),
+			TLSHandshakeTimeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThan*1000),
 				float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
 			IdleConnTimeout:    30 * time.Second,
 			DisableCompression: false,
 		},
-		Timeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThen*1000),
+		Timeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThan*1000),
 			float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if !c.Request.HTTPPayload.FollowRedirects {

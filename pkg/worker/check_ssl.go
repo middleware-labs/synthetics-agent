@@ -141,11 +141,11 @@ func (checker *sslChecker) fillAssertions(expiryDays int64) testStatus {
 		}
 		switch assert.Type {
 		case assertTypeSSLCertificate:
-			if assert.Config.Operator == "expires_in_greater_then_days" {
-				assert.Config.Operator = "greater_then"
+			if assert.Config.Operator == "expires_in_greater_than_days" {
+				assert.Config.Operator = "greater_than"
 			}
-			if assert.Config.Operator == "expires_in_less_then_days" {
-				assert.Config.Operator = "less_then"
+			if assert.Config.Operator == "expires_in_less_than_days" {
+				assert.Config.Operator = "less_than"
 			}
 			assertChecker["reason"] = "will expire in " + strings.ReplaceAll(assert.Config.Operator, "_", " ") + " " + assert.Config.Value + " days"
 			assertChecker["actual"] = strconv.FormatInt(expiryDays, 10) + " days"
@@ -288,7 +288,7 @@ func (checker *sslChecker) check() testStatus {
 		"actual": fmt.Sprintf("%v", isCa),
 		"status": cSta,
 	})
-	expiryDays := int64(cert.NotAfter.Sub(time.Now()).Hours() / 24)
+	expiryDays := int64(time.Until(cert.NotAfter).Hours() / 24)
 
 	if !checker.c.Request.SslSignedCertificate && !isCa {
 		testStatus.status = testStatusFail
@@ -312,7 +312,7 @@ func (checker *sslChecker) check() testStatus {
 			{
 				"type": assertTypeSSLCertificate,
 				"config": map[string]string{
-					"operator": "expires_in_greater_then_days",
+					"operator": "expires_in_greater_than_days",
 					"value":    strconv.FormatInt(expiryDays, 10),
 				},
 			},

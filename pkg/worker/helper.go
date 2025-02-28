@@ -44,7 +44,7 @@ type CheckTestRequest struct {
 type SyntheticsExpectMeta struct {
 	HttpCode             int    `json:"http_status_code,omitempty"`
 	ResponseText         string `json:"response_text,omitempty"`
-	ResponseTimeLessThen int    `json:"response_time_less_then,omitempty"`
+	ResponseTimeLessThan int    `json:"response_time_less_than,omitempty"`
 
 	PacketLossLimit float64 `json:"packet_loss_limit,omitempty"`
 	LatencyLimit    float64 `json:"latency_limit,omitempty"`
