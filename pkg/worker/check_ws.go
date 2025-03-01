@@ -85,7 +85,7 @@ func getWSDialer(c SyntheticCheck, timers map[string]float64) *websocket.Dialer 
 	tlsDialer := &defaultTLSDialer{
 		dialer: &tls.Dialer{
 			NetDialer: &net.Dialer{
-				Timeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
+				Timeout: time.Duration(c.Expect.ResponseTimeLessThan) * time.Second,
 				Resolver: &net.Resolver{
 					PreferGo: true,
 				},
@@ -94,7 +94,7 @@ func getWSDialer(c SyntheticCheck, timers map[string]float64) *websocket.Dialer 
 	}
 
 	return &websocket.Dialer{
-		HandshakeTimeout: time.Duration(c.Expect.ResponseTimeLessThen) * time.Second,
+		HandshakeTimeout: time.Duration(c.Expect.ResponseTimeLessThan) * time.Second,
 		TLSClientConfig: &tls.Config{
 			RootCAs:            roots,
 			InsecureSkipVerify: true,
@@ -273,7 +273,7 @@ func (checker *wsChecker) check() testStatus {
 	checker.timers["duration"] = timeInMs(time.Since(start))
 	start = time.Now()
 
-	err = conn.SetWriteDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second))
+	err = conn.SetWriteDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThan) * time.Second))
 	if err != nil {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("failed to set WriteDeadline, %v", err)
@@ -282,7 +282,7 @@ func (checker *wsChecker) check() testStatus {
 
 	}
 
-	err = conn.SetReadDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second))
+	err = conn.SetReadDeadline(time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThan) * time.Second))
 	if err != nil {
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("failed to set ReadDeadline, %v", err)

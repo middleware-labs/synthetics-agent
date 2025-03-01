@@ -225,7 +225,7 @@ func (checker *udpChecker) check() testStatus {
 		return testStatus
 	}
 
-	deadline := time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThen) * time.Second)
+	deadline := time.Now().Add(time.Duration(c.Expect.ResponseTimeLessThan) * time.Second)
 	err = checker.netHelper.setUDPReadDeadline(conn, deadline)
 	if err != nil {
 		testStatus.status = testStatusError

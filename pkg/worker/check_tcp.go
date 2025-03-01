@@ -230,7 +230,7 @@ func (checker *tcpChecker) processTCPTTL(addr []net.IP, lcErr error) testStatus 
 	if checker.c.Request.TTL {
 		if len(addr) > 0 {
 			traceRouter := newTraceRouteChecker(addr[0],
-				checker.c.Expect.ResponseTimeLessThen, checker.timers, checker.attrs)
+				checker.c.Expect.ResponseTimeLessThan, checker.timers, checker.attrs)
 			tStatus := traceRouter.check()
 			traceRouter.getAttrs().CopyTo(checker.attrs)
 
@@ -279,7 +279,7 @@ func (checker *tcpChecker) check() testStatus {
 
 	conn, tmErr := checker.netter.DialTimeout("tcp", addr[0].String()+
 		":"+checker.c.Request.Port,
-		time.Duration(checker.c.Expect.ResponseTimeLessThen)*time.Second)
+		time.Duration(checker.c.Expect.ResponseTimeLessThan)*time.Second)
 	if tmErr != nil {
 		checker.timers["connection"] = timeInMs(time.Since(cnTime))
 		testStatus.status = testStatusError

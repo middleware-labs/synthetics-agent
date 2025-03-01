@@ -28,7 +28,7 @@ func TestWsCheck(t *testing.T) {
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
 					Expect: SyntheticsExpectMeta{
-						ResponseTimeLessThen: 10,
+						ResponseTimeLessThan: 10,
 					},
 					Request: SyntheticsRequestOptions{
 						WSPayload: WSPayloadOptions{
