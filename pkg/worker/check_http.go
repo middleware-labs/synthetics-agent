@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -44,9 +45,10 @@ type httpChecker struct {
 	testBody   map[string]interface{}
 	attrs      pcommon.Map
 	k6Scripter k6Scripter
+	objStorage ObjectStorage
 }
 
-func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
+func newHTTPChecker(c SyntheticCheck, objectStorage ObjectStorage) (protocolChecker, error) {
 	parsedURL, err := url.Parse(c.Endpoint)
 	if err != nil {
 		return nil, err
@@ -79,6 +81,7 @@ func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
 		},
 		attrs:      pcommon.NewMap(),
 		k6Scripter: &defaultK6Scripter{},
+		objStorage: objectStorage,
 	}, nil
 }
 
@@ -88,6 +91,25 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if c.Request.HTTPPayload.RequestBody.Content != "" &&
 		c.Request.HTTPPayload.RequestBody.Type != "" {
 		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
+	}
+
+	if c.Request.HTTPPayload.RequestBody.Type == "application/octet-stream" && c.Request.HTTPPayload.RequestBody.BucketKey != "" {
+		key := fmt.Sprintf("%s/synthetics/%s", os.Getenv("CLOUD_STORAGE_BUCKET"), c.Request.HTTPPayload.RequestBody.BucketKey)
+		exist := checker.objStorage.Exists(key)
+		if exist {
+			reader, err := checker.objStorage.Get(key)
+			if err != nil {
+				return nil, err
+			}
+			defer reader.Close()
+
+			bodyBytes, err := io.ReadAll(reader)
+			if err != nil {
+				return nil, err
+			}
+
+			c.Request.HTTPPayload.RequestBody.Content = string(bodyBytes)
+		}
 	}
 
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)

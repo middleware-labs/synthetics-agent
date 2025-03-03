@@ -178,8 +178,12 @@ type Authentication struct {
 }
 
 type RequestBody struct {
-	Type    string `json:"type"`
-	Content string `json:"content"`
+	Type      string  `json:"type"`
+	Content   string  `json:"content"`
+	FileName  string  `json:"file_name"`
+	FileType  string  `json:"file_type"`
+	FileSize  float64 `json:"file_size"`
+	BucketKey string  `json:"bucket_key"`
 }
 
 type HTTPPayloadOptions struct {

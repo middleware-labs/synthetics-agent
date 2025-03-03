@@ -45,10 +45,10 @@ var (
 	testStatusPass  string = "PASS"
 )
 
-func getProtocolChecker(c SyntheticCheck) (protocolChecker, error) {
+func getProtocolChecker(c SyntheticCheck, objectStorage ObjectStorage) (protocolChecker, error) {
 	switch c.Proto {
 	case "http":
-		httpChecker, err := newHTTPChecker(c)
+		httpChecker, err := newHTTPChecker(c, objectStorage)
 		return httpChecker, err
 	case "tcp":
 		return newTCPChecker(c)
@@ -153,8 +153,8 @@ func percentCalc(val float64, percent float64) float64 {
 	return f2d
 }
 
-func (cs *CheckState) testFire() (map[string]interface{}, error) {
-	protocolChecker, err := getProtocolChecker(cs.check)
+func (cs *CheckState) testFire(objectStorage ObjectStorage) (map[string]interface{}, error) {
+	protocolChecker, err := getProtocolChecker(cs.check, objectStorage)
 	if err != nil {
 		return nil, err
 	}
@@ -164,9 +164,9 @@ func (cs *CheckState) testFire() (map[string]interface{}, error) {
 	return resp, nil
 }
 
-func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
+func (cs *CheckState) liveTestFire(objectStorage ObjectStorage) (map[string]interface{}, error) {
 
-	protocolChecker, err := getProtocolChecker(cs.check)
+	protocolChecker, err := getProtocolChecker(cs.check, objectStorage)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 	}, nil
 }
 
-func (cs *CheckState) fire() error {
+func (cs *CheckState) fire(objectStorage ObjectStorage) error {
 
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
@@ -272,7 +272,7 @@ func (cs *CheckState) fire() error {
 			}
 		}
 	} else {
-		protocolChecker, err := getProtocolChecker(c)
+		protocolChecker, err := getProtocolChecker(c, objectStorage)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ type CheckState struct {
 }
 
 func newCheckState(check SyntheticCheck,
-	location string, captureEndpoint string) *CheckState {
+	location string, captureEndpoint string, objectStorage ObjectStorage) *CheckState {
 	return &CheckState{
 		location:        location,
 		captureEndpoint: captureEndpoint,
@@ -339,7 +339,7 @@ func (w *Worker) removeCheckState(check *SyntheticCheck) {
 	}
 }
 func (w *Worker) getTestState(check SyntheticCheck) *CheckState {
-	return newCheckState(check, w.cfg.Location, w.cfg.CaptureEndpoint)
+	return newCheckState(check, w.cfg.Location, w.cfg.CaptureEndpoint, w.objectStorage)
 }
 
 func (w *Worker) getCheckState(check SyntheticCheck) *CheckState {
@@ -349,7 +349,7 @@ func (w *Worker) getCheckState(check SyntheticCheck) *CheckState {
 	checkState, ok := w._checks[check.Uid]
 	if !ok {
 		checkState = newCheckState(check, w.cfg.Location,
-			w.cfg.CaptureEndpoint)
+			w.cfg.CaptureEndpoint, w.objectStorage)
 		w._checks[check.Uid] = checkState
 	}
 	return checkState
@@ -364,7 +364,7 @@ func (c *CheckState) remove() {
 var firing map[string]*sync.Mutex = map[string]*sync.Mutex{}
 var firingLock = sync.Mutex{}
 
-func (cs *CheckState) update() {
+func (cs *CheckState) update(objectStorage ObjectStorage) {
 	c := cs.check
 	if cs.timerStop != nil {
 		cs.timerStop()
@@ -379,7 +379,7 @@ func (cs *CheckState) update() {
 		slog.String("fireIn", fireIn.String()))
 
 	if c.CheckTestRequest.URL != "" {
-		err := cs.fire()
+		err := cs.fire(objectStorage)
 		if err != nil {
 			slog.Error("error firing", slog.String("error", err.Error()))
 		}
@@ -413,7 +413,7 @@ func (cs *CheckState) update() {
 			log.Printf("------------------")
 		}*/
 
-		err := cs.fire()
+		err := cs.fire(objectStorage)
 		if err != nil {
 			slog.Error("error firing", slog.String("error", err.Error()))
 		}
