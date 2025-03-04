@@ -90,6 +90,22 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
 	}
 
+	if c.Request.HTTPPayload.RequestBody.Type == "application/octet-stream" &&
+		c.Request.HTTPPayload.RequestBody.BucketUrl != "" &&
+		c.Request.HTTPPayload.RequestBody.BucketKey != "" {
+
+		resp, err := http.Get(c.Request.HTTPPayload.RequestBody.BucketUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to download data: %s", resp.Status)
+		}
+		reader = resp.Body
+	}
+
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)
 	if err != nil {
 		return nil, err

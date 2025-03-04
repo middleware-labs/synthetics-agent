@@ -86,7 +86,7 @@ func assertString(data string, assert CaseOptions) bool {
 	if assert.Config.Operator == "contains" && !strings.Contains(data, assert.Config.Value) {
 		return false
 	}
-	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Index(data, assert.Config.Value) >= 0 {
+	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Contains(data, assert.Config.Value) {
 		return false
 	}
 
