@@ -50,19 +50,17 @@ type Config struct {
 	NCAPassword         string
 	Token               string
 	CaptureEndpoint     string
-	ObjectStorage       ObjectStorage
 }
 
 // Worker is the main worker struct
 type Worker struct {
-	cfg           *Config
-	pulsarClient  *ws.Client
-	topic         string
-	_checks       map[string]*CheckState
-	consumer      ws.Consumer
-	messages      map[string]*ws.Msg
-	messagesLock  sync.Mutex
-	objectStorage ObjectStorage
+	cfg          *Config
+	pulsarClient *ws.Client
+	topic        string
+	_checks      map[string]*CheckState
+	consumer     ws.Consumer
+	messages     map[string]*ws.Msg
+	messagesLock sync.Mutex
 }
 
 // New creates a new worker
@@ -83,12 +81,11 @@ func New(cfg *Config) (*Worker, error) {
 	}
 
 	return &Worker{
-		cfg:           cfg,
-		pulsarClient:  ws.New(cfg.PulsarHost),
-		topic:         topic,
-		messages:      make(map[string]*ws.Msg),
-		_checks:       make(map[string]*CheckState),
-		objectStorage: cfg.ObjectStorage,
+		cfg:          cfg,
+		pulsarClient: ws.New(cfg.PulsarHost),
+		topic:        topic,
+		messages:     make(map[string]*ws.Msg),
+		_checks:      make(map[string]*CheckState),
 	}, nil
 }
 
@@ -176,11 +173,11 @@ func (w *Worker) SetMessage(key string, msg *ws.Msg) {
 }
 func (w *Worker) DirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getTestState(v)
-	return checkState.testFire(w.objectStorage)
+	return checkState.testFire()
 }
 func (w *Worker) RealDirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getCheckState(v)
-	return checkState.liveTestFire(w.objectStorage)
+	return checkState.liveTestFire()
 }
 func (w *Worker) SubscribeUpdates(topic string, token string) {
 	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
@@ -288,7 +285,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 				})
 			}
 			checkState := w.getCheckState(v)
-			checkState.update(w.objectStorage)
+			checkState.update()
 			//}
 			continue
 		}
