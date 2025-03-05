@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
@@ -103,7 +104,11 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("failed to download data: %s", resp.Status)
 		}
-		reader = resp.Body
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body of cloud object: %v", err)
+		}
+		reader = bytes.NewReader(body)
 	}
 
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)
