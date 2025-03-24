@@ -1,7 +1,6 @@
 package worker
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"log/slog"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.uber.org/atomic"
 )
 
 const (
@@ -87,7 +87,7 @@ func assertString(data string, assert CaseOptions) bool {
 	if assert.Config.Operator == "contains" && !strings.Contains(data, assert.Config.Value) {
 		return false
 	}
-	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Index(data, assert.Config.Value) >= 0 {
+	if (assert.Config.Operator == "contains_not" || assert.Config.Operator == "not_contains" || assert.Config.Operator == "does_not_contain") && strings.Contains(data, assert.Config.Value) {
 		return false
 	}
 
@@ -183,10 +183,9 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 	}, nil
 }
 
-func (cs *CheckState) fire() error {
-	slog.Info("fire() started", slog.Int("id", cs.check.Id))
+func (cs *CheckState) fire(logs *[]string) error {
 	//	log.Printf("go: %d", runtime.NumGoroutine())
-	//time.Sleep(5 * time.Second)
+	*logs = append(*logs, fmt.Sprintf("%s fire() started 1", time.Now().String()))
 	c := cs.check
 	defer func() {
 		if r := recover(); r != nil {
@@ -194,6 +193,7 @@ func (cs *CheckState) fire() error {
 		}
 	}()
 
+	*logs = append(*logs, fmt.Sprintf("%s fire() started 2", time.Now().String()))
 	if c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
 		allow := false
 		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
@@ -206,12 +206,14 @@ func (cs *CheckState) fire() error {
 				allow = true
 			}
 		}
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 3", time.Now().String()))
 
 		if !allow {
 			return fmt.Errorf("check %d: %s, current day %s, allowed days %v", cs.check.Id,
 				errCheckNotAllowedToRun, today,
 				c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek)
 		}
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 4", time.Now().String()))
 
 		currentDate := time.Now().In(loc)
 		timeFormat := "2006-01-02 15:04"
@@ -229,6 +231,8 @@ func (cs *CheckState) fire() error {
 				errCheckNotAllowedToRun, currentUnixTime, startUnixTime)
 		}
 
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 5", time.Now().String()))
+
 		endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
 			c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
 		end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
@@ -241,9 +245,11 @@ func (cs *CheckState) fire() error {
 			return fmt.Errorf("check %d: %s, current time %d > end time %d", cs.check.Id,
 				errCheckNotAllowedToRun, currentUnixTime, endUnixTime)
 		}
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 6", time.Now().String()))
 
 	}
 
+	*logs = append(*logs, fmt.Sprintf("%s fire() started 7", time.Now().String()))
 	if c.Proto == "browser" {
 		browserChecker := NewBrowserChecker(c)
 		browsers := c.Request.Browsers
@@ -271,26 +277,29 @@ func (cs *CheckState) fire() error {
 				}(browser)
 			}
 		}
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 8", time.Now().String()))
 		wg.Wait()
 	} else {
 		protocolChecker, err := getProtocolChecker(c)
 		if err != nil {
 			return err
 		}
-
 		testStatus := protocolChecker.check()
-
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 9", time.Now().String()))
 		isTestReq := c.CheckTestRequest.URL != ""
 		if isTestReq {
+			*logs = append(*logs, fmt.Sprintf("%s fire() started 10", time.Now().String()))
 			cs.finishTestRequest(protocolChecker.getTestResponseBody())
+
 		} else {
+			*logs = append(*logs, fmt.Sprintf("%s fire() started 11", time.Now().String()))
 			cs.finishCheckRequest(testStatus,
 				protocolChecker.getTimers(),
 				protocolChecker.getAttrs())
 		}
+		*logs = append(*logs, fmt.Sprintf("%s fire() started 12", time.Now().String()))
 	}
-	defer slog.Info("fire() completed", slog.Int("id", cs.check.Id))
-
+	*logs = append(*logs, fmt.Sprintf("%s fire() started 13", time.Now().String()))
 	return nil
 }
 
@@ -380,8 +389,9 @@ func (cs *CheckState) update() {
 	slog.Info("code change next fire in", slog.String("interval", intervalDuration.String()),
 		slog.String("fireIn", fireIn.String()))
 
+	logs := make([]string, 0)
 	if c.CheckTestRequest.URL != "" {
-		err := cs.fire()
+		err := cs.fire(&logs)
 		if err != nil {
 			slog.Error("error firing", slog.String("error", err.Error()))
 		}
@@ -422,22 +432,28 @@ func (cs *CheckState) update() {
 			log.Printf("------------------")
 		}*/
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		fireChan := make(chan struct{}, 1)
+		wg := sync.WaitGroup{}
+		wgc := atomic.NewBool(false)
+		wg.Add(1)
 		go func() {
-			err := cs.fire()
+			defer func() {
+				if wgc.CompareAndSwap(false, true) {
+					defer wg.Done()
+				}
+			}()
+			err := cs.fire(&logs)
 			if err != nil {
 				slog.Error("error firing", slog.String("error", err.Error()))
 			}
-			fireChan <- struct{}{}
 		}()
-
-		select {
-		case <-fireChan:
-		case <-ctx.Done():
-			slog.Error("function is stuck inside cs.fire", slog.String("uid", c.Uid))
-		}
+		go func() {
+			time.Sleep(1 * time.Minute)
+			if wgc.CompareAndSwap(false, true) {
+				slog.Error("function is stuck inside cs.fire", slog.String("uid", c.Uid), slog.String("logs", strings.Join(logs, "\n")))
+				wg.Done()
+			}
+		}()
+		wg.Wait()
 		//c.update(txnId, nil)
 	}
 

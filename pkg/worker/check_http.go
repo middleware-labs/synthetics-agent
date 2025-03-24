@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
@@ -88,6 +89,26 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if c.Request.HTTPPayload.RequestBody.Content != "" &&
 		c.Request.HTTPPayload.RequestBody.Type != "" {
 		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
+	}
+
+	if c.Request.HTTPPayload.RequestBody.Type == "application/octet-stream" &&
+		c.Request.HTTPPayload.RequestBody.BucketUrl != "" &&
+		c.Request.HTTPPayload.RequestBody.BucketKey != "" {
+
+		resp, err := http.Get(c.Request.HTTPPayload.RequestBody.BucketUrl)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send GET request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to download data: %s", resp.Status)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response body of cloud object: %v", err)
+		}
+		reader = bytes.NewReader(body)
 	}
 
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)
