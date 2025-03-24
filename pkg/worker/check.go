@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -183,13 +184,13 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 }
 
 func (cs *CheckState) fire() error {
-
+	slog.Info("fire() started", slog.Int("id", cs.check.Id))
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	//time.Sleep(5 * time.Second)
 	c := cs.check
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Error("panic", slog.String("error", r.(string)))
+			slog.Error("panic", slog.String("error", r.(string)), slog.Int("id", cs.check.Id))
 		}
 	}()
 
@@ -268,9 +269,9 @@ func (cs *CheckState) fire() error {
 					slog.Info("Test invoked. TestID: %s", slog.String("testId", commandArgs.TestId))
 
 				}(browser)
-				wg.Wait()
 			}
 		}
+		wg.Wait()
 	} else {
 		protocolChecker, err := getProtocolChecker(c)
 		if err != nil {
@@ -288,6 +289,7 @@ func (cs *CheckState) fire() error {
 				protocolChecker.getAttrs())
 		}
 	}
+	defer slog.Info("fire() completed", slog.Int("id", cs.check.Id))
 
 	return nil
 }
@@ -402,6 +404,13 @@ func (cs *CheckState) update() {
 			return
 		}
 
+		defer func() {
+			lock.Unlock()
+			firingLock.Lock()
+			delete(firing, c.Uid)
+			firingLock.Unlock()
+		}()
+
 		diff := time.Now().UTC().UnixMilli() - (c.CreatedAt.UTC().UnixMilli() + 20*1000)
 		interval := int64(c.IntervalSeconds) * 1000
 		offBy := time.Duration((diff % interval)) * time.Millisecond
@@ -413,16 +422,22 @@ func (cs *CheckState) update() {
 			log.Printf("------------------")
 		}*/
 
-		err := cs.fire()
-		if err != nil {
-			slog.Error("error firing", slog.String("error", err.Error()))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		fireChan := make(chan struct{}, 1)
+		go func() {
+			err := cs.fire()
+			if err != nil {
+				slog.Error("error firing", slog.String("error", err.Error()))
+			}
+			fireChan <- struct{}{}
+		}()
+
+		select {
+		case <-fireChan:
+		case <-ctx.Done():
+			slog.Error("function is stuck inside cs.fire", slog.String("uid", c.Uid))
 		}
-
-		firingLock.Lock()
-		lock.Unlock()
-		delete(firing, c.Uid)
-		firingLock.Unlock()
-
 		//c.update(txnId, nil)
 	}
 
