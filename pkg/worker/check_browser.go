@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 )
@@ -152,7 +153,11 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 		return
 	}
 
-	resp, err := http.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
+	httpClient := &http.Client{
+		Timeout: 60 * time.Second,
+	}
+
+	resp, err := httpClient.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		slog.Error("HTTP request failed", slog.String("error", err.Error()))
 		return
