@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5"
 	"crypto/rand"
 	"crypto/sha1"
@@ -200,6 +201,11 @@ func (checker *httpChecker) processHTTPError(testStatus testStatus) {
 }
 
 func getHTTPClient(c SyntheticCheck) httpClient {
+
+	//Defaulting timeout to 60secs
+	if c.Expect.ResponseTimeLessThan <= 0 {
+		c.Expect.ResponseTimeLessThan = 60
+	}
 	return &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -463,6 +469,10 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	if err != nil {
 		tStatus.status = testStatusError
 		tStatus.msg = fmt.Sprintf("error while sending request %v", err)
+
+		if err == context.DeadlineExceeded {
+			tStatus.msg = "Error: The request couldn't be completed in a reasonable time due to TIMEOUT."
+		}
 
 		checker.timers["duration"] = timeInMs(time.Since(start))
 
