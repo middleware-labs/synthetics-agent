@@ -258,7 +258,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			if err != nil {
 				slog.Error("failed to send preview", slog.String("error", err.Error()))
 			}
-			if err != nil {
+			if err == nil {
 				slog.Info("test preview result sent to pulsar", slog.Int("check.Id", v.Id), slog.String("AccountUID", v.AccountUID))
 			}
 			continue
