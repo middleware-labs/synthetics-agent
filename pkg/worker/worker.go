@@ -239,7 +239,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		if testReqURL != "" {
 			result, err := w.DirectRun(v)
 			if err != nil {
-				slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.String("error", err.Error()))
+				slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.Int("Id", v.Id), slog.String("error", err.Error()))
 				slog.Info("empty result will be sent")
 			}
 			v.Action = "delete"
