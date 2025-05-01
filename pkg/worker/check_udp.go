@@ -59,8 +59,7 @@ func (checker *udpChecker) processUDPResponse(testStatus *testStatus, received [
 		udpStatus = udpStatusFailed
 	}
 
-	isTestReq := c.CheckTestRequest.URL != ""
-	if !isTestReq {
+	if !checker.c.IsPreviewRequest {
 		testStatusMsg := make([]string, 0)
 		for _, assert := range c.Request.Assertions.UDP.Cases {
 			// do not process assertions if status of any (previous)

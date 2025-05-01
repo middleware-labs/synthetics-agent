@@ -210,7 +210,6 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	}
 
 	ctx := context.Background()
-
 	for {
 		msg, err := w.consumer.Receive(ctx)
 		if err != nil {
@@ -234,9 +233,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			w.consumer.Ack(context.Background(), msg)
 			continue
 		}
-
-		testReqURL := v.CheckTestRequest.URL
-		if testReqURL != "" {
+		if v.IsPreviewRequest {
 			result, err := w.DirectRun(v)
 			if err != nil {
 				slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.Int("Id", v.Id), slog.String("error", err.Error()))
@@ -257,8 +254,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			err = w.sendPreview(v.Id, "preview", result)
 			if err != nil {
 				slog.Error("failed to send preview", slog.String("error", err.Error()))
-			}
-			if err == nil {
+			} else {
 				slog.Info("test preview result sent to pulsar", slog.Int("check.Id", v.Id), slog.String("AccountUID", v.AccountUID))
 			}
 			continue
@@ -298,7 +294,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 
 		if v.Action == "update" {
 			w.SetMessage(msg.Key, msg)
-			if v.CheckTestRequest.URL != "" {
+			if v.IsPreviewRequest {
 				err := w.consumer.Ack(context.Background(), msg)
 				if err != nil {
 					slog.Error("ack msg failed", slog.String("error", err.Error()))
@@ -306,7 +302,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			}
 
 			//if !refresh {
-			if v.CheckTestRequest.URL == "" {
+			if !v.IsPreviewRequest {
 				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
 					Not:        w.cfg.Hostname,
 					Action:     "unsub",

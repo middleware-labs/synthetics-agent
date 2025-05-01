@@ -153,7 +153,7 @@ var (
 func (checker *tcpChecker) processTCPResponse(testStatus testStatus) {
 	c := checker.c
 
-	if c.CheckTestRequest.URL == "" {
+	if !c.IsPreviewRequest {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 	} else {

@@ -211,7 +211,7 @@ func (checker *wsChecker) processWSResonse(testStatus *testStatus, httpResp *htt
 	tStatus := checker.fillWSAssertions(httpResp, recMsg)
 	testStatus.status = tStatus.status
 	testStatus.msg = tStatus.msg
-	if c.CheckTestRequest.URL == "" {
+	if !c.IsPreviewRequest {
 		resultStr, _ := json.Marshal(checker.assertions)
 		checker.attrs.PutStr("assertions", string(resultStr))
 		return

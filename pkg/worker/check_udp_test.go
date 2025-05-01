@@ -272,13 +272,13 @@ func TestUDPProcessUDPResponse(t *testing.T) {
 
 			tookMs := testBody["tookMs"].(string)
 			actualTookMs := fmt.Sprintf("%.2f ms", udpChecker.timers["duration"])
-			if udpChecker.c.CheckTestRequest.URL != "" &&
+			if udpChecker.c.IsPreviewRequest &&
 				tookMs != actualTookMs {
 				t.Fatalf("%s: expected tookMs %v, but got %v", tt.name,
 					tookMs, actualTookMs)
 			}
 			udpStatus := testBody["udp_status"].(string)
-			if udpChecker.c.CheckTestRequest.URL != "" &&
+			if udpChecker.c.IsPreviewRequest &&
 				udpStatus != tt.expectedStatus {
 				t.Fatalf("%s: expected udp_status %v, but got %v", tt.name,
 					tt.expectedStatus, udpStatus)

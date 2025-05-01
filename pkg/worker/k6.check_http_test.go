@@ -123,9 +123,6 @@ func TestHTTPMultiStepRequest(t *testing.T) {
 			name: "Test HTTP MultiStep GET request with test",
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
-					CheckTestRequest: CheckTestRequest{
-						URL: "http://example.com",
-					},
 					Request: SyntheticsRequestOptions{
 						HTTPMultiTest: true,
 						HTTPMultiSteps: []HTTPMultiStepsOptions{

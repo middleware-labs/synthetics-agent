@@ -13,7 +13,7 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		status: testStatusOK,
 	}
 
-	isCheckTestReq := c.CheckTestRequest.URL != ""
+	isCheckTestReq := c.IsPreviewRequest
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
 	checker.timers["duration"] = timeInMs(time.Since(start))

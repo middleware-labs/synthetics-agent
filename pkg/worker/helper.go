@@ -26,7 +26,7 @@ type SyntheticsModel struct {
 	AccountKey       string                   `json:"account_key"`
 	AccountUID       string                   `json:"account_uid"`
 	Details          map[string]interface{}   `json:"details"`
-	CheckTestRequest CheckTestRequest         `json:"check_test_request"`
+	IsPreviewRequest bool                     `json:"is_preview_request"`
 }
 
 type CheckTestRequestHeaders struct {
@@ -35,10 +35,6 @@ type CheckTestRequestHeaders struct {
 	AccountUID    string `json:"account_uid"`
 	UserId        int    `json:"user_id"`
 	CheckId       int    `json:"check_id"`
-}
-type CheckTestRequest struct {
-	URL        string              `json:"url"`
-	Headers    map[string]string   `json:"headers"`
 }
 
 type SyntheticsExpectMeta struct {
