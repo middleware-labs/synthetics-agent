@@ -577,6 +577,7 @@ func (checker *httpChecker) check() testStatus {
 	c := checker.c
 
 	if c.Request.HTTPMultiTest && len(c.Request.HTTPMultiSteps) > 0 {
+		fmt.Println("it is multi step request")
 		return checker.checkHTTPMultiStepsRequest(c)
 	}
 

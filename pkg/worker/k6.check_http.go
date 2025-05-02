@@ -14,6 +14,8 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	isCheckTestReq := c.IsPreviewRequest
+	fmt.Println("isCheckTestReq = ", isCheckTestReq)
+	fmt.Printf("checker.testBody: %+v\n", checker.testBody)
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
 	checker.timers["duration"] = timeInMs(time.Since(start))
@@ -33,6 +35,8 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 			"body":             resSteps,
 			"headers":          resHeaders,
 		}
+		fmt.Printf("checker.testBody (updated): %+v\n", checker.testBody)
+
 		// finishTestRequest(c, _testBody)
 		return testStatus
 	}
