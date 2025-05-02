@@ -3,6 +3,7 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -14,8 +15,8 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	isCheckTestReq := c.IsPreviewRequest
-	fmt.Println("isCheckTestReq = ", isCheckTestReq)
-	fmt.Printf("checker.testBody: %+v\n", checker.testBody)
+	slog.Info("isCheckTestReq = ", slog.Bool("value", isCheckTestReq))
+	slog.Info("checker.testBody", slog.Any("checker.testBody", checker.testBody))
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
 	checker.timers["duration"] = timeInMs(time.Since(start))
@@ -35,7 +36,7 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 			"body":             resSteps,
 			"headers":          resHeaders,
 		}
-		fmt.Printf("checker.testBody (updated): %+v\n", checker.testBody)
+		slog.Info("checker.testBody (updated)", slog.Any("checker.testBody", checker.testBody))
 
 		// finishTestRequest(c, _testBody)
 		return testStatus
