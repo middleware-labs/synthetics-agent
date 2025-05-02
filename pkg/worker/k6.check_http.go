@@ -19,13 +19,19 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	slog.Info("checker.testBody", slog.Any("checker.testBody", checker.testBody))
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
+	if exeErr != nil {
+		slog.Error("error while executing sciptsnippet", slog.String("err", exeErr.Error()))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error while executing sciptsnippet: %v", exeErr)
+		return testStatus
+	}
 	slog.Info("response from script excecution", slog.Any("respValue", respValue))
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	response := make(map[string]interface{}, 0)
 	err := json.Unmarshal([]byte(respValue), &response)
 	if err != nil {
-		slog.Error("error while parsing response from k6Scripter.execute()", slog.String("err", err.Error()))
+		slog.Error("error while unmarshaling response from k6Scripter.execute()", slog.String("err", err.Error()))
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("error while parsing response: %v", err)
 		return testStatus
