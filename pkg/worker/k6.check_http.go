@@ -19,18 +19,22 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	slog.Info("checker.testBody", slog.Any("checker.testBody", checker.testBody))
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
+	slog.Info("response from script excecution", slog.Any("respValue", respValue))
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	response := make(map[string]interface{}, 0)
 	err := json.Unmarshal([]byte(respValue), &response)
 	if err != nil {
+		slog.Error("error while parsing response from k6Scripter.execute()", slog.String("err", err.Error()))
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("error while parsing response: %v", err)
 		return testStatus
 	}
 
 	if isCheckTestReq {
+		slog.Info("its true")
 		resSteps, resHeaders := response["steps"], response["headers"]
+		slog.Info("response object", slog.Any("resSteps", resSteps), slog.Any("resHeaders", resHeaders))
 		checker.testBody = map[string]interface{}{
 			"multiStepPreview": true,
 			"body":             resSteps,
