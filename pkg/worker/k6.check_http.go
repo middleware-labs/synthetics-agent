@@ -15,8 +15,6 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	isCheckTestReq := c.IsPreviewRequest
-	slog.Info("isCheckTestReq = ", slog.Bool("value", isCheckTestReq))
-	slog.Info("checker.testBody", slog.Any("checker.testBody", checker.testBody))
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
 	if exeErr != nil {
@@ -25,7 +23,6 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		testStatus.msg = fmt.Sprintf("error while executing sciptsnippet: %v", exeErr)
 		return testStatus
 	}
-	slog.Info("response from script excecution", slog.Any("respValue", respValue))
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	response := make(map[string]interface{}, 0)
@@ -38,16 +35,12 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 	}
 
 	if isCheckTestReq {
-		slog.Info("its true")
 		resSteps, resHeaders := response["steps"], response["headers"]
-		slog.Info("response object", slog.Any("resSteps", resSteps), slog.Any("resHeaders", resHeaders))
 		checker.testBody = map[string]interface{}{
 			"multiStepPreview": true,
 			"body":             resSteps,
 			"headers":          resHeaders,
 		}
-		slog.Info("checker.testBody (updated)", slog.Any("checker.testBody", checker.testBody))
-
 		// finishTestRequest(c, _testBody)
 		return testStatus
 	}
