@@ -403,9 +403,9 @@ func (w *Worker) sendPreview(id int, topic string, payload map[string]interface{
 }
 
 func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool) error {
-	pulsarHost := os.Getenv("PULSAR_HOST")
-	if pulsarHost == "" {
-		return fmt.Errorf("PULSAR_HOST environment variable not set")
+	pulsarHost, err := normalizePulsarHost()
+	if err != nil {
+		return err
 	}
 
 	pl, _ := json.Marshal(payload)
@@ -470,4 +470,23 @@ func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool
 	}
 	// log.Printf("pulsar send msg topic:%s key:%s payload:%s endpoint:%s", topic, key, payload, endpoint)
 	return nil
+}
+
+func normalizePulsarHost() (string, error) {
+	pulsarHost := os.Getenv("PULSAR_HOST")
+	if pulsarHost == "" {
+		return "", fmt.Errorf("environment variable PULSAR_HOST is not set")
+	}
+
+	switch {
+	case strings.HasPrefix(pulsarHost, "wss://"):
+		pulsarHost = strings.Replace(pulsarHost, "wss://", "https://", 1)
+	case strings.HasPrefix(pulsarHost, "ws://"):
+		pulsarHost = strings.Replace(pulsarHost, "ws://", "http://", 1)
+
+	default:
+		return "", fmt.Errorf("unsupported Pulsar host scheme: %s", pulsarHost)
+	}
+
+	return pulsarHost, nil
 }
