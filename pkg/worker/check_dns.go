@@ -383,8 +383,7 @@ func (checker *dnsChecker) processDNSResponse(testStatus *testStatus, ips []net.
 	c := checker.c
 	ctx := context.Background()
 
-	isTestReq := checker.c.CheckTestRequest.URL != ""
-	if !isTestReq {
+	if !checker.c.IsPreviewRequest {
 		tStatus := checker.fillAssertions(ips)
 		testStatus.status = tStatus.status
 		testStatus.msg = tStatus.msg

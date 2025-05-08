@@ -3,6 +3,7 @@ package worker
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 )
 
@@ -13,14 +14,21 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		status: testStatusOK,
 	}
 
-	isCheckTestReq := c.CheckTestRequest.URL != ""
+	isCheckTestReq := c.IsPreviewRequest
 	scriptSnippet := CreateScriptSnippet(c)
 	respValue, exeErr := checker.k6Scripter.execute(scriptSnippet)
+	if exeErr != nil {
+		slog.Error("error while executing sciptsnippet", slog.String("err", exeErr.Error()))
+		testStatus.status = testStatusError
+		testStatus.msg = fmt.Sprintf("error while executing sciptsnippet: %v", exeErr)
+		return testStatus
+	}
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
 	response := make(map[string]interface{}, 0)
 	err := json.Unmarshal([]byte(respValue), &response)
 	if err != nil {
+		slog.Error("error while unmarshaling response from k6Scripter.execute()", slog.String("err", err.Error()))
 		testStatus.status = testStatusError
 		testStatus.msg = fmt.Sprintf("error while parsing response: %v", err)
 		return testStatus

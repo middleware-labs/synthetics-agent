@@ -92,7 +92,7 @@ func (checker *sslChecker) processSSLResponse(testStatus testStatus) {
 		}
 	}
 
-	if c.CheckTestRequest.URL == "" {
+	if !checker.c.IsPreviewRequest {
 		// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 		return
 	}

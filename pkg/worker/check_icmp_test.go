@@ -395,13 +395,6 @@ func TestICMPCheck(t *testing.T) {
 			name: "icmp check with multiple assertions with test request",
 			c: SyntheticCheck{
 				SyntheticsModel: SyntheticsModel{
-					CheckTestRequest: CheckTestRequest{
-						URL: "http://example.com",
-						Headers: map[string]string{
-
-							"Content-Type": "application/json",
-						},
-					},
 
 					Request: SyntheticsRequestOptions{
 
@@ -487,7 +480,7 @@ func TestICMPCheck(t *testing.T) {
 			}
 
 			// Test request
-			if test.c.CheckTestRequest.URL != "" {
+			if test.c.IsPreviewRequest {
 				testBody := icmpChecker.getTestResponseBody()
 				if testBody["rcmp_status"] != "SUCCESSFUL" {
 					t.Fatalf("%s: expected test status to be SUCCESSFUL, but got %s",

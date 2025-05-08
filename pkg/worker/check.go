@@ -286,8 +286,8 @@ func (cs *CheckState) fire(logs *[]string) error {
 		}
 		testStatus := protocolChecker.check()
 		*logs = append(*logs, fmt.Sprintf("%s fire() started 9", time.Now().String()))
-		isTestReq := c.CheckTestRequest.URL != ""
-		if isTestReq {
+
+		if c.IsPreviewRequest {
 			*logs = append(*logs, fmt.Sprintf("%s fire() started 10", time.Now().String()))
 			cs.finishTestRequest(protocolChecker.getTestResponseBody())
 
@@ -390,7 +390,7 @@ func (cs *CheckState) update() {
 		slog.String("fireIn", fireIn.String()))
 
 	logs := make([]string, 0)
-	if c.CheckTestRequest.URL != "" {
+	if c.IsPreviewRequest {
 		err := cs.fire(&logs)
 		if err != nil {
 			slog.Error("error firing", slog.String("error", err.Error()))

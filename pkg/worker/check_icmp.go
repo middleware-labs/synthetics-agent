@@ -139,7 +139,7 @@ func (checker *icmpChecker) processICMPResponse(testStatus testStatus) {
 		}
 	}
 
-	if c.CheckTestRequest.URL != "" {
+	if checker.c.IsPreviewRequest {
 		checker.testBody["assertions"] = []map[string]interface{}{
 			{
 				"type": assertTypeICMPLatency,
@@ -253,8 +253,7 @@ func (checker *icmpChecker) check() testStatus {
 	checker.timers["packet_loss"] = stats.PacketLoss
 	checker.timers["packet_recv"] = float64(stats.PacketsRecv)
 
-	isTestReq := c.CheckTestRequest.URL != ""
-	if isTestReq {
+	if checker.c.IsPreviewRequest {
 		checker.testBody["rcmp_status"] = "SUCCESSFUL"
 		checker.testBody["packet"] = fmt.Sprintf("%d packets sent, %d packets received, %f%% packet loss",
 			stats.PacketsSent, stats.PacketsRecv, stats.PacketLoss)

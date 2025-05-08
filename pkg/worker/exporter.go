@@ -194,15 +194,15 @@ func (cs *CheckState) finishCheckRequest(testStatus testStatus,
 
 func (cs *CheckState) finishTestRequest(opts map[string]interface{}) {
 	go func() {
-		c := cs.check
-		if c.CheckTestRequest.URL != "" {
-			_, _ = makeRequest(RequestOptions{
-				URL:     c.CheckTestRequest.URL,
-				Headers: c.CheckTestRequest.Headers,
-				Method:  http.MethodPost,
-				Body:    opts,
-			})
-		}
+		// c := cs.check
+		// if c.IsPreviewRequest {
+		// 	_, _ = makeRequest(RequestOptions{
+		// 		URL:     c.CheckTestRequest.URL,
+		// 		Headers: c.CheckTestRequest.Headers,
+		// 		Method:  http.MethodPost,
+		// 		Body:    opts,
+		// 	})
+		// }
 	}()
 }
 
