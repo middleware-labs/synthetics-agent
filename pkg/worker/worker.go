@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -403,7 +404,7 @@ func (w *Worker) sendPreview(id int, topic string, payload map[string]interface{
 }
 
 func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool) error {
-	pulsarHost, err := normalizePulsarHost()
+	pulsarHost, err := getOrigin(os.Getenv("PULSAR_HOST"))
 	if err != nil {
 		return err
 	}
@@ -472,21 +473,23 @@ func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool
 	return nil
 }
 
-func normalizePulsarHost() (string, error) {
-	pulsarHost := os.Getenv("PULSAR_HOST")
-	if pulsarHost == "" {
-		return "", fmt.Errorf("environment variable PULSAR_HOST is not set")
+func getOrigin(wsURL string) (string, error) {
+	u, err := url.Parse(wsURL)
+	if err != nil {
+		return "", err
 	}
 
-	switch {
-	case strings.HasPrefix(pulsarHost, "wss://"):
-		pulsarHost = strings.Replace(pulsarHost, "wss://", "https://", 1)
-	case strings.HasPrefix(pulsarHost, "ws://"):
-		pulsarHost = strings.Replace(pulsarHost, "ws://", "http://", 1)
-
+	// Convert WebSocket scheme to HTTP scheme for the origin
+	var scheme string
+	switch u.Scheme {
+	case "wss":
+		scheme = "https"
+	case "ws":
+		scheme = "http"
 	default:
-		return "", fmt.Errorf("unsupported Pulsar host scheme: %s", pulsarHost)
+		return "", fmt.Errorf("unsupported scheme: %s", u.Scheme)
 	}
 
-	return pulsarHost, nil
+	origin := fmt.Sprintf("%s://%s", scheme, u.Host)
+	return origin, nil
 }
