@@ -403,9 +403,9 @@ func (w *Worker) sendPreview(id int, topic string, payload map[string]interface{
 }
 
 func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool) error {
-	pulsarHost := os.Getenv("PULSAR_HOST_SYNTHETICS")
+	pulsarHost := os.Getenv("PULSAR_HOST")
 	if pulsarHost == "" {
-		return fmt.Errorf("PULSAR_HOST_SYNTHETICS environment variable not set")
+		return fmt.Errorf("PULSAR_HOST environment variable not set")
 	}
 
 	pl, _ := json.Marshal(payload)
