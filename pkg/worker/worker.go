@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -241,23 +240,18 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 				slog.Info("empty result will be sent")
 			}
 			v.Action = "delete"
-			w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
-				Not:        w.cfg.Hostname,
-				Action:     "unsub",
-				Id:         v.Id,
-				AccountUID: v.AccountUID,
+			w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
+				"Not":        w.cfg.Hostname,
+				"Action":     "unsub",
+				"Id":         v.Id,
+				"AccountUID": v.AccountUID,
 			})
 			err = w.consumer.Ack(context.Background(), msg)
 			if err != nil {
 				slog.Error("failed to ack the msg", slog.String("error", err.Error()))
 				continue
 			}
-			err = w.sendPreview(v.Id, "preview", result)
-			if err != nil {
-				slog.Error("failed to send preview", slog.String("error", err.Error()))
-			} else {
-				slog.Info("test preview result sent to pulsar", slog.Int("check.Id", v.Id), slog.String("AccountUID", v.AccountUID))
-			}
+			w.sendPreview(v.AccountUID, v.Id, "preview", result)
 			continue
 		}
 
@@ -304,11 +298,11 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 
 			//if !refresh {
 			if !v.IsPreviewRequest {
-				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
-					Not:        w.cfg.Hostname,
-					Action:     "unsub",
-					Id:         v.Id,
-					AccountUID: v.AccountUID,
+				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
+					"Not":        w.cfg.Hostname,
+					"Action":     "unsub",
+					"Id":         v.Id,
+					"AccountUID": v.AccountUID,
 				})
 			}
 			checkState := w.getCheckState(v)
@@ -320,11 +314,11 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		// handle delete
 		w.DeleteMessage(msg.Key)
 
-		w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, unsubscribePayload{
-			Not:        w.cfg.Hostname,
-			Action:     "unsub",
-			Id:         v.Id,
-			AccountUID: v.AccountUID,
+		w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
+			"Not":        w.cfg.Hostname,
+			"Action":     "unsub",
+			"Id":         v.Id,
+			"AccountUID": v.AccountUID,
 		})
 
 		err = w.consumer.Ack(context.Background(), msg)
@@ -344,12 +338,12 @@ type unsubscribePayload struct {
 }
 
 func (w *Worker) produceMessage(accountUid string,
-	topic string, key string, payload unsubscribePayload) {
+	topic string, key string, payload map[string]interface{}) {
 
 	type topicKeyPayload struct {
 		Topic   string
 		Key     string
-		Payload unsubscribePayload
+		Payload map[string]interface{}
 	}
 
 	pay := topicKeyPayload{
@@ -384,112 +378,78 @@ func (w *Worker) produceMessage(accountUid string,
 	}
 }
 
-func (w *Worker) sendPreview(id int, topic string, payload map[string]interface{}) error {
-	pay := struct {
-		PreviewId int                    `json:"preview_id"`
-		Topic     string                 `json:"topic"`
-		Result    map[string]interface{} `json:"result"`
-	}{
-		PreviewId: id,
-		Topic:     topic,
-		Result:    payload,
+func (w *Worker) sendPreview(accountUid string, id int, topic string, payload map[string]interface{}) {
+	payloadMap := map[string]interface{}{
+		"PreviewId": string(id),
+		"Topic":      topic,
+		"Result":     payload,
 	}
-
-	payloadStr, err := json.Marshal(pay)
-	if err != nil {
-		slog.Error("failed to marshal payload", slog.String("error", err.Error()))
-		return err
-	}
-	return SendMsgToPulsar(topic, pay.PreviewId, string(payloadStr), true)
+	w.produceMessage(accountUid, topic, string(id), payloadMap)
 }
 
-func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool) error {
-	pulsarHost, err := getOrigin(os.Getenv("PULSAR_HOST"))
-	if err != nil {
-		return err
-	}
+// func SendMsgToPulsar(topic string, key int, payload string, autoCreateTopic bool) error {
+// 	unsubscribeEndpoint := os.Getenv("UNSUBSCRIBE_ENDPOINT")
 
-	pl, _ := json.Marshal(payload)
-	str := `{
-        "producerName": "preview-producer",
-        "messages": [
-            {
-                "key":` + fmt.Sprintf("%v", key) + `,
-                "payload":` + string(pl) + `,
-                "eventTime":` + strconv.FormatInt(time.Now().Unix(), 10) + `,
-                "sequenceId":` + strconv.FormatInt(time.Now().UnixMilli(), 10) + `
-            }
-        ]
-    }`
+// 	pl, _ := json.Marshal(payload)
+// 	str := `{
+//         "producerName": "preview-producer",
+//         "messages": [
+//             {
+//                 "key":` + fmt.Sprintf("%v", key) + `,
+//                 "payload":` + string(pl) + `,
+//                 "eventTime":` + strconv.FormatInt(time.Now().Unix(), 10) + `,
+//                 "sequenceId":` + strconv.FormatInt(time.Now().UnixMilli(), 10) + `
+//             }
+//         ]
+//     }`
 
-	endpoint := pulsarHost + "/topics/persistent/public/default/" + topic
-	req, err := http.NewRequest("POST", endpoint, strings.NewReader(str))
-	if err != nil {
-		return fmt.Errorf("produce message http failed. topic:%s key:%v payload:%s endpoint:%s  %v", topic, key, payload, endpoint, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+// 	endpoint := pulsarHost + "/topics/persistent/public/default/" + topic
+// 	req, err := http.NewRequest("POST", endpoint, strings.NewReader(str))
+// 	if err != nil {
+// 		return fmt.Errorf("produce message http failed. topic:%s key:%v payload:%s endpoint:%s  %v", topic, key, payload, endpoint, err)
+// 	}
+// 	req.Header.Set("Content-Type", "application/json")
 
-	var client = &http.Client{
-		Transport: &http.Transport{},
-	}
+// 	var client = &http.Client{
+// 		Transport: &http.Transport{},
+// 	}
 
-	re, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("produce resp failed, topic:%s key:%d payload:%s endpoint:%s %v", topic, key, payload, endpoint, err)
-	}
-	defer func() {
-		if re != nil {
-			re.Body.Close()
-		}
-	}()
+// 	re, err := client.Do(req)
+// 	if err != nil {
+// 		return fmt.Errorf("produce resp failed, topic:%s key:%d payload:%s endpoint:%s %v", topic, key, payload, endpoint, err)
+// 	}
+// 	defer func() {
+// 		if re != nil {
+// 			re.Body.Close()
+// 		}
+// 	}()
 
-	if re.StatusCode != 200 {
-		str, _ := io.ReadAll(re.Body)
-		if autoCreateTopic && re.StatusCode == 500 && strings.Contains(string(str), topic+" not found") {
-			// Create the topic if not found
-			topicEndpoint := pulsarHost + "/admin/v2/persistent/public/default/" + topic
-			req, err := http.NewRequest("PUT", topicEndpoint, nil)
-			if err != nil {
-				return fmt.Errorf("topic create failed. topic:%s key:%v endpoint:%s  %v", topic, key, topicEndpoint, err)
-			}
-			req.Header.Set("Content-Type", "application/json")
-			re, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("topic create resp failed, topic:%s key:%v endpoint:%s %v", topic, key, topicEndpoint, err)
-			}
-			if re == nil {
-				return fmt.Errorf("nil response when creating topic. topic:%s key:%v endpoint:%s", topic, key, topicEndpoint)
-			}
-			if re.StatusCode != 200 {
-				str, _ := io.ReadAll(re.Body)
-				return fmt.Errorf("produce resp invalid status code, topic:%s key:%v payload:%s endpoint:%s status:%s output:%s", topic, key, payload, endpoint, re.Status, string(str))
-			} else {
-				return SendMsgToPulsar(topic, key, payload, false)
-			}
-		}
-		return fmt.Errorf("produce resp invalid status code, topic:%s key:%v endpoint:%s status:%s output:%s", topic, key, endpoint, re.Status, string(str))
-	}
-	// log.Printf("pulsar send msg topic:%s key:%s payload:%s endpoint:%s", topic, key, payload, endpoint)
-	return nil
-}
-
-func getOrigin(wsURL string) (string, error) {
-	u, err := url.Parse(wsURL)
-	if err != nil {
-		return "", err
-	}
-
-	// Convert WebSocket scheme to HTTP scheme for the origin
-	var scheme string
-	switch u.Scheme {
-	case "wss":
-		scheme = "https"
-	case "ws":
-		scheme = "http"
-	default:
-		return "", fmt.Errorf("unsupported scheme: %s", u.Scheme)
-	}
-
-	origin := fmt.Sprintf("%s://%s", scheme, u.Host)
-	return origin, nil
-}
+// 	if re.StatusCode != 200 {
+// 		str, _ := io.ReadAll(re.Body)
+// 		if autoCreateTopic && re.StatusCode == 500 && strings.Contains(string(str), topic+" not found") {
+// 			// Create the topic if not found
+// 			topicEndpoint := pulsarHost + "/admin/v2/persistent/public/default/" + topic
+// 			req, err := http.NewRequest("PUT", topicEndpoint, nil)
+// 			if err != nil {
+// 				return fmt.Errorf("topic create failed. topic:%s key:%v endpoint:%s  %v", topic, key, topicEndpoint, err)
+// 			}
+// 			req.Header.Set("Content-Type", "application/json")
+// 			re, err := http.DefaultClient.Do(req)
+// 			if err != nil {
+// 				return fmt.Errorf("topic create resp failed, topic:%s key:%v endpoint:%s %v", topic, key, topicEndpoint, err)
+// 			}
+// 			if re == nil {
+// 				return fmt.Errorf("nil response when creating topic. topic:%s key:%v endpoint:%s", topic, key, topicEndpoint)
+// 			}
+// 			if re.StatusCode != 200 {
+// 				str, _ := io.ReadAll(re.Body)
+// 				return fmt.Errorf("produce resp invalid status code, topic:%s key:%v payload:%s endpoint:%s status:%s output:%s", topic, key, payload, endpoint, re.Status, string(str))
+// 			} else {
+// 				return SendMsgToPulsar(topic, key, payload, false)
+// 			}
+// 		}
+// 		return fmt.Errorf("produce resp invalid status code, topic:%s key:%v endpoint:%s status:%s output:%s", topic, key, endpoint, re.Status, string(str))
+// 	}
+// 	// log.Printf("pulsar send msg topic:%s key:%s payload:%s endpoint:%s", topic, key, payload, endpoint)
+// 	return nil
+// }
