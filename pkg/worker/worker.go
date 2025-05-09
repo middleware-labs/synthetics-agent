@@ -374,9 +374,9 @@ func (w *Worker) produceMessage(accountUid string,
 func (w *Worker) sendPreview(accountUid string, id int, topic string, payload map[string]interface{}) {
 	idString := fmt.Sprintf("%d", id)
 	payloadMap := map[string]interface{}{
-		"PreviewId": idString,
-		"Topic":     topic,
-		"Result":    payload,
+		"preview_id": idString,
+		"topic":      topic,
+		"result":     payload,
 	}
 	w.produceMessage(accountUid, topic, idString, payloadMap)
 }
