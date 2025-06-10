@@ -10,6 +10,7 @@ import (
 func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testStatus {
 	start := time.Now()
 	checker.attrs.PutInt("check.created_at", start.UnixMilli())
+	checker.attrs.PutBool("check.isMultiStep", true)
 	testStatus := testStatus{
 		status: testStatusOK,
 	}
