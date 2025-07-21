@@ -218,29 +218,6 @@ func (checker *icmpChecker) check() testStatus {
 	}
 
 	checker.timers["dns"] = timeInMs(time.Since(start))
-	cnTime := time.Now()
-
-	conn, tmErr := checker.netter.DialTimeout("icmp", addr[0].String()+
-		":"+checker.c.Request.Port,
-		time.Duration(checker.c.Expect.ResponseTimeLessThan)*time.Second)
-	if tmErr != nil {
-		checker.timers["connection"] = timeInMs(time.Since(cnTime))
-		testStatus.status = testStatusError
-		testStatus.msg = fmt.Sprintf("error connecting icmp %v", tmErr)
-
-		checker.attrs.PutStr("connection.error", tmErr.Error())
-		icmpStatus = icmpStatusRefused
-		checker.testBody["connection_status"] = icmpStatusRefused
-		if strings.Contains(tmErr.Error(), icmpStatusTimeout) {
-			icmpStatus = tcpStatusTimeout
-			checker.testBody["connection_status"] = icmpStatusTimeout
-		}
-	} else {
-		defer checker.netter.ConnClose(conn)
-		checker.timers["connection"] = timeInMs(time.Since(cnTime))
-		checker.testBody["connection_status"] = icmpStatusEstablished
-	}
-
 	checker.attrs.PutStr("connection.status", icmpStatus)
 	checker.timers["duration"] = timeInMs(time.Since(start))
 
