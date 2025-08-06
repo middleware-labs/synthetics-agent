@@ -21,6 +21,13 @@ const (
 	errCheckNotAllowedToRun = "not allowed to run at this time"
 )
 
+type MCPCheck struct {
+	AccountUID string                 `json:"account_uid"`
+	RequestId  string                 `json:"request_id"`
+	Topic      string                 `json:"topic"`
+	Result     map[string]interface{} `json:"result"`
+}
+
 type SyntheticCheck struct {
 	Uid string
 	//Not string
