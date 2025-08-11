@@ -26,6 +26,7 @@ type SyntheticsModel struct {
 	AccountKey       string                   `json:"account_key"`
 	AccountUID       string                   `json:"account_uid"`
 	Details          map[string]interface{}   `json:"details"`
+	Result     	     map[string]interface{}	  `json:"result"`
 	IsPreviewRequest bool                     `json:"is_preview_request"`
 }
 
