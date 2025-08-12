@@ -315,14 +315,14 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		var result string
 		if v.Action == "mcp-k8s" {
 			result, err = k8s.NewExecutor().Execute(v.Result["command"].(string))
-			if err != nil {
-				slog.Error("failed to execute kubectl command", slog.String("error", err.Error()))
-				w.consumer.Ack(context.Background(), msg)
-				continue
-			}
 			if result != "" {
 				payload["result"] = map[string]interface{}{
 					"stdout": result,
+				}
+			} else if err != nil {
+				slog.Error("failed to execute kubectl command", slog.String("error", err.Error()))
+				payload["result"] = map[string]interface{}{
+					"stdout": err.Error(),
 				}
 			}
 		}
