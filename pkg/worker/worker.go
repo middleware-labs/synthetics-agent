@@ -226,85 +226,12 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		}
 
 		v := SyntheticCheck{}
-
 		err = json.Unmarshal(msg.Payload, &v)
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
 			w.consumer.Ack(context.Background(), msg)
 			continue
 		}
-		if v.IsPreviewRequest {
-			result, err := w.DirectRun(v)
-			if err != nil {
-				slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.Int("Id", v.Id), slog.String("error", err.Error()))
-				slog.Info("empty result will be sent")
-			}
-			v.Action = "delete"
-			err = w.consumer.Ack(context.Background(), msg)
-			if err != nil {
-				slog.Error("failed to ack the msg", slog.String("error", err.Error()))
-				continue
-			}
-			w.sendPreview(v.AccountUID, v.Id, "preview", result)
-			continue
-		}
-
-		if v.Action == "create" {
-			v.Action = "update"
-		}
-
-		if v.Action != "update" && v.Action != "delete" && v.Action != "mcp-k8s" {
-			slog.Info("invalid action message", slog.String("payload", string(msg.Payload)))
-			err := w.consumer.Ack(context.Background(), msg)
-			if err != nil {
-				slog.Error("failed to ack message", slog.String("error", err.Error()))
-			}
-			continue
-		}
-		oldMsg, ok := w.GetMessage(msg.Key)
-
-		if ok && oldMsg.MsgId == msg.MsgId {
-			slog.Info(fmt.Sprintf("[%d] job refresh key:%s ", v.Id, msg.Key))
-		} else if ok && oldMsg.MsgId != msg.MsgId {
-			slog.Info("job update", slog.String("key", msg.Key))
-			err := w.consumer.Ack(context.Background(), oldMsg)
-			if err != nil {
-				slog.Error("failed to ack message", slog.String("error", err.Error()))
-			}
-		} else if !ok {
-			if v.Action == "update" {
-				slog.Info("job assigned update", slog.Int("id", v.Id),
-					slog.String("key", msg.Key))
-			} else {
-				slog.Info("job assign delete", slog.Int("id", v.Id),
-					slog.String("key", msg.Key))
-			}
-		}
-
-		if v.Action == "update" {
-			w.SetMessage(msg.Key, msg)
-			if v.IsPreviewRequest {
-				err := w.consumer.Ack(context.Background(), msg)
-				if err != nil {
-					slog.Error("ack msg failed", slog.String("error", err.Error()))
-				}
-			}
-
-			//if !refresh {
-			if !v.IsPreviewRequest {
-				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
-					"Not":        w.cfg.Hostname,
-					"Action":     "unsub",
-					"Id":         v.Id,
-					"AccountUID": v.AccountUID,
-				})
-			}
-			checkState := w.getCheckState(v)
-			checkState.update()
-			//}
-			continue
-		}
-
 		payload := map[string]interface{}{
 			"Not":        w.cfg.Hostname,
 			"Action":     "unsub",
@@ -315,6 +242,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		var result string
 		if v.Action == "mcp-k8s" {
 			result, err = k8s.NewExecutor().Execute(v.Result["command"].(string))
+			slog.Debug("executing kubectl command", slog.String("command", v.Result["command"].(string)))
 			if result != "" {
 				payload["result"] = map[string]interface{}{
 					"stdout": result,
@@ -325,13 +253,83 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 					"stdout": err.Error(),
 				}
 			}
+		} else {
+			if v.IsPreviewRequest {
+				result, err := w.DirectRun(v)
+				if err != nil {
+					slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.Int("Id", v.Id), slog.String("error", err.Error()))
+					slog.Info("empty result will be sent")
+				}
+				v.Action = "delete"
+				err = w.consumer.Ack(context.Background(), msg)
+				if err != nil {
+					slog.Error("failed to ack the msg", slog.String("error", err.Error()))
+					continue
+				}
+				w.sendPreview(v.AccountUID, v.Id, "preview", result)
+				continue
+			}
+
+			if v.Action == "create" {
+				v.Action = "update"
+			}
+
+			if v.Action != "update" && v.Action != "delete" {
+				slog.Info("invalid action message", slog.String("payload", string(msg.Payload)))
+				err := w.consumer.Ack(context.Background(), msg)
+				if err != nil {
+					slog.Error("failed to ack message", slog.String("error", err.Error()))
+				}
+				continue
+			}
+			oldMsg, ok := w.GetMessage(msg.Key)
+
+			if ok && oldMsg.MsgId == msg.MsgId {
+				slog.Info(fmt.Sprintf("[%d] job refresh key:%s ", v.Id, msg.Key))
+			} else if ok && oldMsg.MsgId != msg.MsgId {
+				slog.Info("job update", slog.String("key", msg.Key))
+				err := w.consumer.Ack(context.Background(), oldMsg)
+				if err != nil {
+					slog.Error("failed to ack message", slog.String("error", err.Error()))
+				}
+			} else if !ok {
+				if v.Action == "update" {
+					slog.Info("job assigned update", slog.Int("id", v.Id),
+						slog.String("key", msg.Key))
+				} else {
+					slog.Info("job assign delete", slog.Int("id", v.Id),
+						slog.String("key", msg.Key))
+				}
+			}
+
+			if v.Action == "update" {
+				w.SetMessage(msg.Key, msg)
+				if v.IsPreviewRequest {
+					err := w.consumer.Ack(context.Background(), msg)
+					if err != nil {
+						slog.Error("ack msg failed", slog.String("error", err.Error()))
+					}
+				}
+
+				//if !refresh {
+				if !v.IsPreviewRequest {
+					w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
+						"Not":        w.cfg.Hostname,
+						"Action":     "unsub",
+						"Id":         v.Id,
+						"AccountUID": v.AccountUID,
+					})
+				}
+				checkState := w.getCheckState(v)
+				checkState.update()
+				//}
+				continue
+			}
+
+			// handle delete
+			w.DeleteMessage(msg.Key)
 		}
-
-		// handle delete
-		w.DeleteMessage(msg.Key)
-
 		w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, payload)
-
 		err = w.consumer.Ack(context.Background(), msg)
 		if err != nil {
 			slog.Error("failed to ack the msg", slog.String("error", err.Error()))
