@@ -6,8 +6,6 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/google/shlex"
 )
 
 // ShellProcess wraps a shell command execution
@@ -46,39 +44,19 @@ func (s *ShellProcess) Exec(commands string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.Timeout)*time.Second)
 	defer cancel()
 
-	var cmd *exec.Cmd
-
-	// Parse the command string with proper handling of quotes
-	parts, err := shlex.Split(commands)
-	if err != nil {
-		return "", err
-	}
-
-	if len(parts) > 1 {
-		// Command with arguments
-		// #nosec G204: Subprocess launched with a potential tainted input or cmd arguments
-		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
-	} else if len(parts) == 1 {
-		// Single command without arguments
-		// #nosec G204: Subprocess launched with a potential tainted input or cmd arguments
-		cmd = exec.CommandContext(ctx, parts[0])
-	} else {
-		// Empty command
-		return "", nil
-	}
+	// Always run via shell to preserve heredoc and pipes
+	cmd := exec.CommandContext(ctx, "sh", "-c", commands)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	// Execute the command
-	err = cmd.Run()
+	err := cmd.Run()
 
 	// Check for timeout
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", ctx.Err()
 	}
-
 	// Handle errors
 	if err != nil {
 		if s.ReturnErrOutput && stderr.Len() > 0 {

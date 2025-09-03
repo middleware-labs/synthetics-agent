@@ -17,7 +17,6 @@ require (
 require (
 	github.com/bufbuild/protocompile v0.14.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/likexian/gokit v0.25.15 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
