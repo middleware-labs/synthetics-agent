@@ -29,6 +29,7 @@ type Mode uint16
 var (
 	ModeLocation Mode = 0
 	ModeAgent    Mode = 1
+	ModeMCP      Mode = 2
 )
 
 func (m Mode) String() string {
@@ -37,6 +38,8 @@ func (m Mode) String() string {
 		return "location"
 	case ModeAgent:
 		return "agent"
+	case ModeMCP:
+		return "mcp"
 	}
 
 	return "unknown"
@@ -77,6 +80,9 @@ func New(cfg *Config) (*Worker, error) {
 			topic = fmt.Sprintf("%s-%s-%x", ModeAgent, strings.ToLower(cfg.Token),
 				sha1.Sum([]byte(strings.ToLower(cfg.Location))))
 		}
+	case ModeMCP:
+		topic = fmt.Sprintf("%s-%s-%x", ModeMCP, strings.ToLower(cfg.Token),
+			sha1.Sum([]byte(strings.ToLower(cfg.Location))))
 	default:
 		return &Worker{}, errInvalidMode
 	}
