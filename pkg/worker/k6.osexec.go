@@ -187,9 +187,9 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				body,
 				requestOptions
 			)
-
+			let jsonResp = null;
 			try {
-				const jsonResp = response.json()
+				jsonResp = response.json()
 				if (jsonResp) {
 					stepsResponse[stepKey] = jsonResp;
 					stepsHeader[stepKey] = response.headers;
@@ -266,6 +266,43 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 						isfail = true
 						_assertions[assert.type].status = "FAIL"
 						_assertions[assert.type].reason = "assert failed, " + assert.type.replace('_', '') + " didn't matched"
+					}
+				} else if (assert.type === 'body') {
+				    const responseBody = jsonResp ? JSON.stringify(jsonResp) : "";
+					let sOk = false
+					if (assert.config.operator === 'is') {
+						sOk = check(response, {
+							['body is ' + assert.config.value]: (r) => responseBody === assert.config.value,
+						})
+					} else if (assert.config.operator === 'is_not') {
+						sOk = check(response, {
+							['body is not' + assert.config.value]: (r) => responseBody !== assert.config.value,
+						})
+					} else if (assert.config.operator === "contains") {
+						sOk = check(response, {
+							['body contains' + assert.config.value]: (r) => responseBody.indexOf(assert.config.value) > -1,
+						})
+					} else if (assert.config.operator === "not_contains" || assert.config.operator === "does_not_contain") {
+						sOk = check(response, {
+							['body not contains' + assert.config.value]: (r) => responseBody.indexOf(assert.config.value) === -1,
+						})
+					} else if (assert.config.operator === "match_regex") {
+						sOk = check(response, {
+							['body match_regex' + assert.config.value]: (r) => responseBody.match(_vl),
+						})
+					} else if (assert.config.operator === "not_match_regex") {
+						sOk = check(response, {
+							['body not match_regex' + assert.config.value]: (r) => !responseBody.match(_vl),
+						})
+					}
+					if (sOk) {
+						_assertions[assert.type].status = "PASS"
+						_assertions[assert.type].actual = "Matched"
+					} else {
+						isfail = true
+						_assertions[assert.type].status = "FAIL"
+						_assertions[assert.type].actual = "Not Matched"
+						_assertions[assert.type].reason = "should be " + assert.config.operator + " " + assert.config.value + " didn't matched"
 					}
 				}
         	}

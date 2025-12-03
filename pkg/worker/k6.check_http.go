@@ -34,14 +34,13 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		testStatus.msg = fmt.Sprintf("error while parsing response: %v", err)
 		return testStatus
 	}
-
+	resSteps, resHeaders := response["steps"], response["headers"]
+	checker.testBody = map[string]interface{}{
+		"multiStepPreview": true,
+		"body":             resSteps,
+		"headers":          resHeaders,
+	}
 	if isCheckTestReq {
-		resSteps, resHeaders := response["steps"], response["headers"]
-		checker.testBody = map[string]interface{}{
-			"multiStepPreview": true,
-			"body":             resSteps,
-			"headers":          resHeaders,
-		}
 		// finishTestRequest(c, _testBody)
 		return testStatus
 	}
@@ -112,6 +111,13 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
+	rawResponse, _ := json.Marshal(resSteps)
+	checker.attrs.PutStr("check.details.body_raw", string(rawResponse))
+	for k, v := range resHeaders.(map[string]interface{}) {
+		rawHeaders, _ := json.Marshal(v)
+		checker.attrs.PutStr(`check.details.`+k, string(rawHeaders))
+	}
+
 	// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 	return testStatus
 }
