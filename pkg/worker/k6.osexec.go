@@ -114,7 +114,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 			let endpoint = step.endpoint
 			let body = step.request.http_payload.request_body
 			let headers = {
-				'Content-Type': 'application/json'
+				'Content-Type': step.request.http_payload.type
 			}
 			if (step.request.http_headers && Array.isArray(step.request.http_headers)) {
 				for (const header of step.request.http_headers) {
