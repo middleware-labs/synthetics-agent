@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -87,7 +88,144 @@ func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
 func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error) {
 	c := checker.c
 	var reader io.Reader = nil
-	if c.Request.HTTPPayload.RequestBody.Type == "application/x-www-form-urlencoded" {
+	if strings.HasPrefix(c.Request.HTTPPayload.RequestBody.Type, "multipart/form-data") {
+
+		if c.Request.HTTPPayload.RequestBody.Content != "" {
+			// Check if content already contains raw multipart data (has boundary markers)
+			contentHasBoundary := strings.Contains(c.Request.HTTPPayload.RequestBody.Content, "Content-Disposition: form-data")
+			if contentHasBoundary {
+				// RAW MULTIPART PAYLOAD - use content as-is
+				content := c.Request.HTTPPayload.RequestBody.Content
+
+				// Convert literal \r\n to actual CRLF if present
+				// This handles cases where the content has escaped sequences as strings
+				if strings.Contains(content, "\\r\\n") {
+					content = strings.ReplaceAll(content, "\\r\\n", "\r\n")
+				}
+				// Also handle cases where only \n is present (normalize to \r\n)
+				if !strings.Contains(content, "\r\n") && strings.Contains(content, "\n") {
+					content = strings.ReplaceAll(content, "\n", "\r\n")
+				}
+
+				reader = strings.NewReader(content)
+
+				// Extract boundary from Content-Type or from the content itself
+				if !strings.Contains(c.Request.HTTPPayload.RequestBody.Type, "boundary=") {
+					// Try to extract boundary from first line of content
+					lines := strings.Split(content, "\n")
+					if len(lines) > 0 {
+						firstLine := strings.TrimSpace(strings.TrimRight(lines[0], "\r"))
+						if strings.HasPrefix(firstLine, "--") {
+							// Remove leading dashes to get boundary
+							boundary := strings.TrimPrefix(firstLine, "--")
+							// Update Content-Type with boundary
+							c.Request.HTTPPayload.RequestBody.Type = "multipart/form-data; boundary=" + boundary
+						}
+					}
+				}
+			} else {
+				// STRUCTURED DATA - build multipart programmatically
+				var buf bytes.Buffer
+				writer := multipart.NewWriter(&buf)
+
+				// Extract custom boundary if provided in Content-Type
+				customBoundary := ""
+				if strings.Contains(c.Request.HTTPPayload.RequestBody.Type, "boundary=") {
+					parts := strings.Split(c.Request.HTTPPayload.RequestBody.Type, "boundary=")
+					if len(parts) > 1 {
+						customBoundary = strings.TrimSpace(parts[1])
+					}
+				}
+
+				// Set custom boundary if provided
+				if customBoundary != "" {
+					writer.SetBoundary(customBoundary)
+				}
+
+				// Try to parse as JSON first (for structured field data)
+				var fields map[string]interface{}
+				if err := json.Unmarshal([]byte(c.Request.HTTPPayload.RequestBody.Content), &fields); err == nil {
+					// Content is JSON - add each field
+					for key, value := range fields {
+						var strValue string
+						switch v := value.(type) {
+						case string:
+							strValue = v
+						default:
+							// Convert non-string values to JSON
+							jsonBytes, _ := json.Marshal(v)
+							strValue = string(jsonBytes)
+						}
+						err := writer.WriteField(key, strValue)
+						if err != nil {
+							return nil, fmt.Errorf("failed to write multipart field %s: %v", key, err)
+						}
+					}
+				} else {
+					// Not JSON - try to parse as form-encoded data (key=value&key2=value2)
+					pairs := strings.Split(c.Request.HTTPPayload.RequestBody.Content, "&")
+					for _, pair := range pairs {
+						kv := strings.SplitN(pair, "=", 2)
+						if len(kv) == 2 {
+							// URL decode the key and value
+							key, _ := url.QueryUnescape(kv[0])
+							value, _ := url.QueryUnescape(kv[1])
+							err := writer.WriteField(key, value)
+							if err != nil {
+								return nil, fmt.Errorf("failed to write multipart field: %v", err)
+							}
+						} else if len(kv) == 1 && kv[0] != "" {
+							key, _ := url.QueryUnescape(kv[0])
+							err := writer.WriteField(key, "")
+							if err != nil {
+								return nil, fmt.Errorf("failed to write multipart field: %v", err)
+							}
+						}
+					}
+				}
+
+				// Handle file uploads if BucketUrl is provided
+				if c.Request.HTTPPayload.RequestBody.BucketUrl != "" && c.Request.HTTPPayload.RequestBody.BucketKey != "" {
+					resp, err := http.Get(c.Request.HTTPPayload.RequestBody.BucketUrl)
+					if err != nil {
+						return nil, fmt.Errorf("failed to send GET request for file: %v", err)
+					}
+					defer resp.Body.Close()
+
+					if resp.StatusCode != http.StatusOK {
+						return nil, fmt.Errorf("failed to download file: %s", resp.Status)
+					}
+
+					// Use BucketKey as filename, or default to "file"
+					fileName := c.Request.HTTPPayload.RequestBody.BucketKey
+					if fileName == "" {
+						fileName = "file"
+					}
+
+					// Create form file field (field name can be customized if needed)
+					fieldName := "file"
+					part, err := writer.CreateFormFile(fieldName, fileName)
+					if err != nil {
+						return nil, fmt.Errorf("failed to create form file: %v", err)
+					}
+
+					_, err = io.Copy(part, resp.Body)
+					if err != nil {
+						return nil, fmt.Errorf("failed to copy file content: %v", err)
+					}
+				}
+
+				err := writer.Close()
+				if err != nil {
+					return nil, fmt.Errorf("failed to close multipart writer: %v", err)
+				}
+
+				reader = &buf
+				// Update Content-Type with actual boundary used
+				c.Request.HTTPPayload.RequestBody.Type = writer.FormDataContentType()
+			}
+		}
+	} else if c.Request.HTTPPayload.RequestBody.Type == "application/x-www-form-urlencoded" {
 		if c.Request.HTTPPayload.RequestBody.Content != "" {
 			// Parse and encode form data properly
 			formData := url.Values{}
@@ -103,11 +241,7 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 			}
 			reader = strings.NewReader(formData.Encode())
 		}
-	} else if c.Request.HTTPPayload.RequestBody.Content != "" && c.Request.HTTPPayload.RequestBody.Type != "" {
-		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
-	}
-
-	if c.Request.HTTPPayload.RequestBody.Type == "application/octet-stream" &&
+	} else if c.Request.HTTPPayload.RequestBody.Type == "application/octet-stream" &&
 		c.Request.HTTPPayload.RequestBody.BucketUrl != "" &&
 		c.Request.HTTPPayload.RequestBody.BucketKey != "" {
 
@@ -125,6 +259,8 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 			return nil, fmt.Errorf("failed to read response body of cloud object: %v", err)
 		}
 		reader = bytes.NewReader(body)
+	} else if c.Request.HTTPPayload.RequestBody.Content != "" && c.Request.HTTPPayload.RequestBody.Type != "" {
+		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
 	}
 
 	req, err := http.NewRequest(c.Request.HTTPMethod, c.Endpoint, reader)
