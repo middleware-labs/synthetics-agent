@@ -1101,8 +1101,8 @@ func TestBuildHttpRequest(t *testing.T) {
 					req.Header.Get("Content-Type"))
 			}
 
-			if req.Header.Get("Set-Cookie") != "cookie1=value1" {
-				t.Fatalf("Unexpected Set-Cookie header: %v", req.Header.Get("Set-Cookie"))
+			if req.Header.Get("Cookie") != "cookie1=value1" {
+				t.Fatalf("Unexpected Cookie header: %v", req.Header.Get("Cookie"))
 			}
 
 		})

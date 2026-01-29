@@ -87,8 +87,23 @@ func newHTTPChecker(c SyntheticCheck) (protocolChecker, error) {
 func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error) {
 	c := checker.c
 	var reader io.Reader = nil
-	if c.Request.HTTPPayload.RequestBody.Content != "" &&
-		c.Request.HTTPPayload.RequestBody.Type != "" {
+	if c.Request.HTTPPayload.RequestBody.Type == "application/x-www-form-urlencoded" {
+		if c.Request.HTTPPayload.RequestBody.Content != "" {
+			// Parse and encode form data properly
+			formData := url.Values{}
+			pairs := strings.Split(c.Request.HTTPPayload.RequestBody.Content, "&")
+			for _, pair := range pairs {
+				kv := strings.SplitN(pair, "=", 2)
+				if len(kv) == 2 {
+					formData.Set(kv[0], kv[1])
+				} else if len(kv) == 1 {
+					// Handle cases like "ClientID=" (empty value)
+					formData.Set(kv[0], "")
+				}
+			}
+			reader = strings.NewReader(formData.Encode())
+		}
+	} else if c.Request.HTTPPayload.RequestBody.Content != "" && c.Request.HTTPPayload.RequestBody.Type != "" {
 		reader = strings.NewReader(c.Request.HTTPPayload.RequestBody.Content)
 	}
 
@@ -120,9 +135,12 @@ func (checker *httpChecker) buildHttpRequest(digest bool) (*http.Request, error)
 	if c.Request.HTTPPayload.RequestBody.Type != "" {
 		req.Header.Set("Content-Type", c.Request.HTTPPayload.RequestBody.Type)
 	}
+
 	for _, header := range strings.Split(c.Request.HTTPPayload.Cookies, "\n") {
-		req.Header.Add("Set-Cookie",
-			strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(header, "\t", ""), "\n", ""), "\r", "")))
+		cookie := strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(header, "\t", ""), "\n", ""), "\r", ""))
+		if cookie != "" {
+			req.Header.Add("Cookie", cookie)
+		}
 	}
 
 	if c.Request.HTTPPayload.Authentication.Type == "basic" &&
