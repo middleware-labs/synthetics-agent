@@ -354,10 +354,15 @@ type Client struct {
 func (c *Client) isRetryableError(err error) bool {
 	slog.Debug("isRetryableError", slog.String("error",
 		fmt.Sprintf("%#T %#v", err, err)))
-	// Websocket-specific.
+	
+	// Websocket-specific close errors that should trigger retry
 	if websocket.IsCloseError(err,
-		websocket.CloseGoingAway,
-		websocket.CloseAbnormalClosure,
+		websocket.CloseGoingAway,           // 1001
+		websocket.CloseAbnormalClosure,     // 1006
+		websocket.CloseNoStatusReceived,    // 1005
+		websocket.ClosePolicyViolation,     // 1008
+		websocket.CloseInternalServerErr,   // 1011
+		websocket.CloseTLSHandshake,        // 1015
 	) {
 		return true
 	}
@@ -376,9 +381,10 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 	// Check if a reconnect is worth doing.. otherwise return the error.
 	if err != nil {
 		if !c.isRetryableError(err) {
+			slog.Error("non-retryable error encountered", slog.String("error", err.Error()))
 			return nil, err
 		}
-		slog.Debug("reconnecting", slog.String("error", err.Error()))
+		slog.Info("reconnecting due to retryable error", slog.String("error", err.Error()))
 	}
 
 	var w *websocket.Conn
@@ -399,7 +405,7 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 	err = backoff.Retry(func() error {
 		w, _, err = c.dialer.Dial(url, nil)
 		if err != nil {
-			slog.Error("dial", slog.String("error", err.Error()))
+			slog.Error("dial attempt failed", slog.String("error", err.Error()))
 		}
 		return err
 	}, o)
@@ -441,7 +447,7 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 		}()
 	*/
 
-	slog.Debug("connected")
+	slog.Info("websocket connected successfully")
 	return w, nil
 }
 
