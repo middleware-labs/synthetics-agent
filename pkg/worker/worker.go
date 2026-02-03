@@ -16,8 +16,8 @@ import (
 
 	"log/slog"
 
+	"github.com/middleware-labs/synthetics-agent/pkg/mq"
 	"github.com/middleware-labs/synthetics-agent/pkg/worker/k8s"
-	"github.com/middleware-labs/synthetics-agent/pkg/ws"
 )
 
 var (
@@ -49,7 +49,7 @@ type Config struct {
 	Mode                Mode
 	Location            string
 	Hostname            string
-	PulsarHost          string
+	RabbitMQURL         string // Changed from PulsarHost
 	UnsubscribeEndpoint string
 	NCAPassword         string
 	Token               string
@@ -59,11 +59,11 @@ type Config struct {
 // Worker is the main worker struct
 type Worker struct {
 	cfg          *Config
-	pulsarClient *ws.Client
+	mqClient     *mq.Client // Changed from pulsarClient
 	topic        string
 	_checks      map[string]*CheckState
-	consumer     ws.Consumer
-	messages     map[string]*ws.Msg
+	consumer     mq.Consumer
+	messages     map[string]*mq.Msg
 	messagesLock sync.Mutex
 }
 
@@ -88,11 +88,11 @@ func New(cfg *Config) (*Worker, error) {
 	}
 
 	return &Worker{
-		cfg:          cfg,
-		pulsarClient: ws.New(cfg.PulsarHost),
-		topic:        topic,
-		messages:     make(map[string]*ws.Msg),
-		_checks:      make(map[string]*CheckState),
+		cfg:      cfg,
+		mqClient: mq.New(cfg.RabbitMQURL),
+		topic:    topic,
+		messages: make(map[string]*mq.Msg),
+		_checks:  make(map[string]*CheckState),
 	}, nil
 }
 
@@ -102,14 +102,15 @@ func (w *Worker) Run() {
 }
 
 func (w *Worker) UnsubscribeUpdates(topic string, token string) {
-	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 	consumerName := "unsubscribe-" + w.cfg.Hostname + "-" +
 		strconv.FormatInt(time.Now().UTC().Unix(), 10)
 
-	consumer, err := w.pulsarClient.Consumer("persistent/public/default/"+topic+"-unsubscribe", consumerName, ws.Params{
+	// In RabbitMQ, we don't use persistent/public/default prefix
+	unsubTopic := topic + "-unsubscribe"
+
+	consumer, err := w.mqClient.Consumer(unsubTopic, consumerName, mq.Params{
 		"subscriptionType": "Exclusive",
 		"consumerName":     consumerName,
-		"token":            token,
 	})
 
 	if err != nil {
@@ -135,7 +136,12 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 		}
 
 		v := unsubscribePayload{}
-		err = json.Unmarshal(msg.Payload, &v)
+		var payloadStr string
+		if err := json.Unmarshal(msg.Payload, &payloadStr); err == nil {
+			err = json.Unmarshal([]byte(payloadStr), &v)
+		} else {
+			err = json.Unmarshal(msg.Payload, &v)
+		}
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
 		}
@@ -162,50 +168,51 @@ func (w *Worker) UnsubscribeUpdates(topic string, token string) {
 		}
 	}
 }
-func (w *Worker) GetMessage(key string) (*ws.Msg, bool) {
+
+func (w *Worker) GetMessage(key string) (*mq.Msg, bool) {
 	w.messagesLock.Lock()
 	defer w.messagesLock.Unlock()
 	msg, ok := w.messages[key]
 	return msg, ok
 }
+
 func (w *Worker) DeleteMessage(key string) {
 	w.messagesLock.Lock()
 	defer w.messagesLock.Unlock()
 	delete(w.messages, key)
 }
-func (w *Worker) SetMessage(key string, msg *ws.Msg) {
+
+func (w *Worker) SetMessage(key string, msg *mq.Msg) {
 	w.messagesLock.Lock()
 	defer w.messagesLock.Unlock()
 	w.messages[key] = msg
 }
+
 func (w *Worker) DirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getTestState(v)
 	return checkState.testFire()
 }
+
 func (w *Worker) RealDirectRun(v SyntheticCheck) (map[string]interface{}, error) {
 	checkState := w.getCheckState(v)
 	return checkState.liveTestFire()
 }
-func (w *Worker) SubscribeUpdates(topic string, token string) {
-	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 
+func (w *Worker) SubscribeUpdates(topic string, token string) {
 	consumerName := "subscribe-" + w.cfg.Hostname + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
-	url := w.cfg.Hostname + "/consumer/persistent/public/default/" +
-		topic + "/" + consumerName + "?token=" + token
-	slog.Info("subscribing to topic", slog.String("url", url),
-		slog.String("consumer", consumerName), slog.String("token", token))
+
+	slog.Info("subscribing to topic",
+		slog.String("topic", topic),
+		slog.String("consumer", consumerName),
+		slog.String("token", token))
 
 	var err error
-	w.consumer, err = w.pulsarClient.Consumer("persistent/public/default/"+topic,
-		"subscribe", ws.Params{
-			"subscriptionType":           "Shared",
-			"ackTimeoutMillis":           strconv.Itoa(60 * 60 * 1000),
-			"consumerName":               consumerName,
-			"negativeAckRedeliveryDelay": "0",
-			"pullMode":                   "false",
-			"receiverQueueSize":          "500000",
-			"token":                      token,
-		})
+	w.consumer, err = w.mqClient.Consumer(topic, "subscribe", mq.Params{
+		"subscriptionType":  "Shared",
+		"consumerName":      consumerName,
+		"receiverQueueSize": "500000",
+	})
+
 	if err != nil {
 		slog.Error("failed to subscribe",
 			slog.String("error", err.Error()))
@@ -232,12 +239,18 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 		}
 
 		v := SyntheticCheck{}
-		err = json.Unmarshal(msg.Payload, &v)
+		var payloadStr string
+		if err := json.Unmarshal(msg.Payload, &payloadStr); err == nil {
+			err = json.Unmarshal([]byte(payloadStr), &v)
+		} else {
+			err = json.Unmarshal(msg.Payload, &v)
+		}
 		if err != nil {
 			slog.Error("failed to decode json", slog.String("error", err.Error()))
 			w.consumer.Ack(context.Background(), msg)
 			continue
 		}
+
 		payload := map[string]interface{}{
 			"Not":        w.cfg.Hostname,
 			"Action":     "unsub",
@@ -245,6 +258,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			"AccountUID": v.AccountUID,
 			"topic":      topic,
 		}
+
 		var result string
 		if v.Action == "mcp-k8s" {
 			result, err = k8s.NewExecutor().Execute(v.Result["command"].(string))
@@ -288,6 +302,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 				}
 				continue
 			}
+
 			oldMsg, ok := w.GetMessage(msg.Key)
 
 			if ok && oldMsg.MsgId == msg.MsgId {
@@ -317,7 +332,6 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 					}
 				}
 
-				//if !refresh {
 				if !v.IsPreviewRequest {
 					w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, map[string]interface{}{
 						"Not":        w.cfg.Hostname,
@@ -328,13 +342,12 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 				}
 				checkState := w.getCheckState(v)
 				checkState.update()
-				//}
 				continue
 			}
-
 			// handle delete
 			w.DeleteMessage(msg.Key)
 		}
+
 		w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, payload)
 		err = w.consumer.Ack(context.Background(), msg)
 		if err != nil {
