@@ -219,6 +219,7 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	for {
 		msg, err := w.consumer.Receive(ctx)
 		if err != nil {
+			slog.Error("failed to consume", slog.String("error", err.Error()))
 			w.consumer.Close()
 
 			timer := time.NewTimer(time.Second * 5)
@@ -261,18 +262,32 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			}
 		} else {
 			if v.IsPreviewRequest {
-				result, err := w.DirectRun(v)
-				if err != nil {
-					slog.Error("failed to run preview test", slog.String("accountUID", v.AccountUID), slog.Int("Id", v.Id), slog.String("error", err.Error()))
-					slog.Info("empty result will be sent")
-				}
-				v.Action = "delete"
-				err = w.consumer.Ack(context.Background(), msg)
-				if err != nil {
-					slog.Error("failed to ack the msg", slog.String("error", err.Error()))
-					continue
-				}
-				w.sendPreview(v.AccountUID, v.Id, "preview", result)
+				// Process preview requests asynchronously
+				go func(check SyntheticCheck, msg *ws.Msg) {
+					result, err := w.DirectRun(check)
+					slog.Debug("running preview test",
+						slog.String("accountUID", check.AccountUID),
+						slog.Int("Id", check.Id))
+
+					if err != nil {
+						slog.Error("failed to run preview test",
+							slog.String("accountUID", check.AccountUID),
+							slog.Int("Id", check.Id),
+							slog.String("error", err.Error()))
+						slog.Info("empty result will be sent")
+					}
+
+					// Ack the message
+					err = w.consumer.Ack(context.Background(), msg)
+					if err != nil {
+						slog.Error("failed to ack the msg", slog.String("error", err.Error()))
+					}
+
+					// Send preview result
+					w.sendPreview(check.AccountUID, check.Id, "preview", result)
+				}(v, msg)
+
+				// Continue processing other messages immediately
 				continue
 			}
 
