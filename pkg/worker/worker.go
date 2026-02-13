@@ -262,13 +262,13 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			}
 		} else {
 			if v.IsPreviewRequest {
-				slog.Debug("received preview request",
+				slog.Info("received preview request",
 					slog.String("accountUID", v.AccountUID),
 					slog.Int("Id", v.Id))
 				// Process preview requests asynchronously
 				go func(check SyntheticCheck, msg *ws.Msg) {
 					result, err := w.DirectRun(check)
-					slog.Debug("running preview test",
+					slog.Info("running preview test",
 						slog.String("accountUID", check.AccountUID),
 						slog.Int("Id", check.Id))
 
