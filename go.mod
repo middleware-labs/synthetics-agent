@@ -1,6 +1,6 @@
 module github.com/middleware-labs/synthetics-agent
 
-go 1.23
+go 1.24.0
 
 require (
 	github.com/adakailabs/go-traceroute v0.0.0-20210727014431-97524352ab91
@@ -10,8 +10,8 @@ require (
 	github.com/prometheus-community/pro-bing v0.1.0
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/collector/pdata v1.0.0-rc3.0.20230109164642-7d168dd20efd
-	golang.org/x/sync v0.10.0
-	google.golang.org/grpc v1.61.0
+	golang.org/x/sync v0.19.0
+	google.golang.org/grpc v1.79.3
 )
 
 require (
@@ -20,7 +20,7 @@ require (
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/likexian/gokit v0.25.15 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
 
@@ -36,9 +36,9 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.uber.org/atomic v1.10.0
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	golang.org/x/net v0.48.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/text v0.32.0 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
