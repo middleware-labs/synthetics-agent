@@ -365,12 +365,14 @@ func getHTTPClient(c SyntheticCheck) httpClient {
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: c.Request.HTTPPayload.IgnoreServerCertificateError,
 			},
-			ForceAttemptHTTP2: c.Request.HTTPVersion == "HTTP/2",
-			DisableKeepAlives: false,
-			MaxIdleConns:      10,
+			ForceAttemptHTTP2:     c.Request.HTTPVersion == "HTTP/2",
+			DisableKeepAlives:     false,
+			MaxIdleConns:          10,
+			MaxIdleConnsPerHost:   5,
+			ExpectContinueTimeout: 1 * time.Second,
 			TLSHandshakeTimeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThan*1000),
 				float64(c.IntervalSeconds*1000-500))) * time.Millisecond,
-			IdleConnTimeout:    30 * time.Second,
+			IdleConnTimeout:    60 * time.Second,
 			DisableCompression: false,
 		},
 		Timeout: time.Duration(math.Min(float64(c.Expect.ResponseTimeLessThan*1000),
@@ -595,6 +597,16 @@ func getHTTPTestCaseStatusCodeAssertions(statusCode int,
 	return assertions, testStatus, testStatusMsg
 }
 
+func isEOFError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection reset by peer") ||
+		strings.Contains(msg, "broken pipe")
+}
+
 func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 	c := checker.c
 	start := time.Now()
@@ -610,26 +622,45 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 		tStatus.status = testStatusError
 		tStatus.msg = fmt.Sprintf("error while building request %v", err)
 		checker.timers["duration"] = timeInMs(time.Since(start))
-
 		checker.processHTTPError(tStatus)
 		return tStatus
 	}
 
-	// get httptrace client
-	trace := checker.getHTTPTraceClientTrace()
-	// perform the requested http request
-	reqCtx := httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
-	resp, err := checker.client.Do(reqCtx)
+	var resp *http.Response
+	for attempt := 0; attempt < 2; attempt++ {
+		trace := checker.getHTTPTraceClientTrace()
+		reqCtx := httpReq.WithContext(httptrace.WithClientTrace(httpReq.Context(), trace))
+		resp, err = checker.client.Do(reqCtx)
+		if err == nil {
+			break
+		}
+		if isEOFError(err) && attempt == 0 {
+			httpReq, err = checker.buildHttpRequest(true)
+			if err != nil {
+				tStatus.status = testStatusError
+				tStatus.msg = fmt.Sprintf("error rebuilding request for retry: %v", err)
+				checker.timers["duration"] = timeInMs(time.Since(start))
+				checker.processHTTPError(tStatus)
+				return tStatus
+			}
+			continue
+		}
+		break
+	}
+
 	if err != nil {
 		tStatus.status = testStatusError
-		tStatus.msg = fmt.Sprintf("error while sending request %v", err)
 
-		if err == context.DeadlineExceeded {
+		switch {
+		case err == context.DeadlineExceeded || strings.Contains(err.Error(), "context deadline exceeded"):
 			tStatus.msg = "Error: The request couldn't be completed in a reasonable time due to TIMEOUT."
+		case isEOFError(err):
+			tStatus.msg = "Error: Connection was closed by the server before the request completed (stale connection)."
+		default:
+			tStatus.msg = fmt.Sprintf("error while sending request %v", err)
 		}
 
 		checker.timers["duration"] = timeInMs(time.Since(start))
-
 		checker.processHTTPError(tStatus)
 		return tStatus
 	}
