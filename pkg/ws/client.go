@@ -16,9 +16,9 @@ import (
 )
 
 var (
-	pingInterval = 10 * time.Second
-	pingTimeout  = 5 * time.Second
-	pongTimeout  = 5 * time.Second
+	pingInterval = 30 * time.Second
+	pingTimeout  = 10 * time.Second
+	pongTimeout  = 10 * time.Second
 )
 
 type Params map[string]string
@@ -413,39 +413,36 @@ func (c *Client) dial(err error, url string, max int) (*websocket.Conn, error) {
 		return nil, err
 	}
 
-	// Setup a ping/pong routine to know when the connection has died.
-	/*
-		go func() {
-			lastResponse := time.Now()
-			w.SetPongHandler(func(_ string) error {
-				now := time.Now()
-				c.Logger.Debug().Dur("delay", now.Sub(lastResponse)).Msg("pong")
-				lastResponse = now
-				return nil
-			})
+	// Ping/pong keepalive to detect dead connections and prevent idle timeouts
+	// at intermediaries (Cloudflare: 100s, Azure LB: 240s).
+	go func() {
+		lastResponse := time.Now()
+		w.SetPongHandler(func(_ string) error {
+			now := time.Now()
+			slog.Debug("pong", slog.Duration("delay", now.Sub(lastResponse)))
+			lastResponse = now
+			return nil
+		})
 
-			ticker := time.NewTicker(pingInterval)
-			for {
-				select {
-				case <-ticker.C:
-					c.Logger.Debug().Msg("ping")
-					err := w.WriteControl(websocket.PingMessage, nil, time.Now().Add(pingTimeout))
-					if err != nil {
-						c.Logger.Error().Err(err).Msg("ping")
-					}
-
-					// Sleep for partial time to be optimistic.
-					time.Sleep(pongTimeout / 2)
-
-					if time.Now().Sub(lastResponse) > pongTimeout {
-						c.Logger.Error().Msg("pong timeout")
-						w.Close()
-						return
-					}
-				}
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			err := w.WriteControl(websocket.PingMessage, nil, time.Now().Add(pingTimeout))
+			if err != nil {
+				slog.Error("ping failed, closing connection", slog.String("error", err.Error()))
+				w.Close()
+				return
 			}
-		}()
-	*/
+
+			time.Sleep(pongTimeout / 2)
+
+			if time.Since(lastResponse) > pongTimeout {
+				slog.Error("pong timeout, closing connection")
+				w.Close()
+				return
+			}
+		}
+	}()
 
 	slog.Info("websocket connected successfully")
 	return w, nil
