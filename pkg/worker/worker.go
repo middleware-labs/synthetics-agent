@@ -97,6 +97,10 @@ func New(cfg *Config) (*Worker, error) {
 }
 
 func (w *Worker) Run() {
+	if w.cfg.Mode == ModeMCP {
+		w.SubscribeUpdates(w.topic, w.cfg.Token)
+		return
+	}
 	go w.UnsubscribeUpdates(w.topic, w.cfg.Token)
 	w.SubscribeUpdates(w.topic, w.cfg.Token)
 }
@@ -374,15 +378,20 @@ func (w *Worker) produceMessage(accountUid string,
 	topic string, key string, payload map[string]interface{}) {
 
 	type topicKeyPayload struct {
-		Topic   string
-		Key     string
-		Payload map[string]interface{}
+		Topic      string
+		Key        string
+		Payload    map[string]interface{}
+		Expiration string `json:"expiration,omitempty"`
 	}
 
 	pay := topicKeyPayload{
 		Topic:   topic,
 		Key:     key,
 		Payload: payload,
+	}
+	if w.cfg.Mode == ModeMCP {
+		expirationMs := strconv.Itoa(65 * 60 * 1000)
+		pay.Expiration = expirationMs
 	}
 	str, _ := json.Marshal(pay)
 
