@@ -21,8 +21,16 @@ import (
 )
 
 var (
-	errInvalidMode = errors.New("invalid mode passed")
+	errInvalidMode      = errors.New("invalid mode passed")
+	errEmptyMCPLocation = errors.New("MCP mode requires a location (cluster name): " +
+		"it is hashed into the request topic, so an empty value would collide with " +
+		"every other deployment sharing this token")
 )
+
+// mcpExecSem bounds how many remote kubectl commands run at once. Requests are
+// dispatched off the receive loop so a slow command cannot block the ones behind
+// it, but an unbounded fan-out would let a burst spawn a process per message.
+var mcpExecSem = make(chan struct{}, 8)
 
 type Mode uint16
 
@@ -81,6 +89,13 @@ func New(cfg *Config) (*Worker, error) {
 				sha1.Sum([]byte(strings.ToLower(cfg.Location))))
 		}
 	case ModeMCP:
+		// Location is the cluster name and must match the MW_KUBE_CLUSTER_NAME
+		// the requesting side uses, since both hash it into this topic. Empty
+		// hashes to the sha1 of "", a constant, so the agent would silently
+		// share a topic with every other deployment using the same token.
+		if strings.TrimSpace(cfg.Location) == "" {
+			return &Worker{}, errEmptyMCPLocation
+		}
 		topic = fmt.Sprintf("%s-%s-%x", ModeMCP, strings.ToLower(cfg.Token),
 			sha1.Sum([]byte(strings.ToLower(cfg.Location))))
 	default:
@@ -250,20 +265,52 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			"AccountUID": v.AccountUID,
 			"topic":      topic,
 		}
-		var result string
 		if v.Action == "mcp-k8s" {
-			result, err = k8s.NewExecutor().Execute(v.Result["command"].(string))
-			slog.Debug("executing kubectl command", slog.String("command", v.Result["command"].(string)))
-			if result != "" {
-				payload["result"] = map[string]interface{}{
-					"stdout": result,
-				}
-			} else if err != nil {
-				slog.Error("failed to execute kubectl command", slog.String("error", err.Error()))
-				payload["result"] = map[string]interface{}{
-					"stdout": err.Error(),
-				}
+			command, ok := v.Result["command"].(string)
+			if !ok {
+				slog.Error("mcp-k8s request carries no command", slog.Int("id", v.Id))
+				w.consumer.Ack(context.Background(), msg)
+				continue
 			}
+
+			// Honour the caller's deadline when it sends one, so our timeout
+			// cannot outlast the window it is still listening in.
+			budget := 0
+			if raw, ok := v.Result["timeout_seconds"].(float64); ok {
+				budget = int(raw)
+			}
+
+			// Run the command off the receive loop, the same way preview
+			// requests are handled below. Executing it inline meant one slow
+			// kubectl stalled every request queued behind it, so a burst of
+			// callers all timed out waiting on work that had not even started.
+			go func(v SyntheticCheck, msg *ws.Msg, command string, budget int, payload map[string]interface{}) {
+				mcpExecSem <- struct{}{}
+				defer func() { <-mcpExecSem }()
+
+				slog.Debug("executing kubectl command", slog.String("command", command))
+				stdout, err := k8s.NewExecutor().ExecuteWithTimeout(command, budget)
+				if err != nil {
+					slog.Error("failed to execute kubectl command",
+						slog.Int("id", v.Id), slog.String("error", err.Error()))
+					if stdout == "" {
+						stdout = err.Error()
+					}
+				}
+
+				// Always reply, even when stdout is empty. Leaving "result"
+				// unset made the caller's type assertion fail, which it
+				// reported as an empty success rather than as the real output.
+				payload["result"] = map[string]interface{}{
+					"stdout": stdout,
+				}
+
+				w.produceMessage(v.AccountUID, topic+"-unsubscribe", msg.Key, payload)
+				if err := w.consumer.Ack(context.Background(), msg); err != nil {
+					slog.Error("failed to ack the msg", slog.String("error", err.Error()))
+				}
+			}(v, msg, command, budget, payload)
+			continue
 		} else {
 			if v.IsPreviewRequest {
 				slog.Info("received preview request",
