@@ -25,7 +25,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 // mockHTTPClientSequence returns different response/error per call, in order.
 // Once the slice is exhausted every subsequent call returns the last entry.
 type mockHTTPClientSequence struct {
-	calls    int
+	calls     int
 	responses []*http.Response
 	errors    []error
 }
@@ -920,6 +920,45 @@ func TestHTTPSingleStepRequest(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestHTTPSingleStepRequest_JSONBodyAssertion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"data":{"status":"healthy"}}`)
+	}))
+	defer server.Close()
+
+	check := SyntheticCheck{
+		SyntheticsModel: SyntheticsModel{
+			Endpoint: server.URL,
+			Request: SyntheticsRequestOptions{
+				HTTPMethod: "GET",
+				Assertions: AssertionsOptions{
+					HTTP: AssertionsCasesOptions{
+						Cases: []CaseOptions{
+							testJSONBodyCase("$.data.status", "equals", "healthy"),
+						},
+					},
+				},
+			},
+			Expect: SyntheticsExpectMeta{},
+		},
+	}
+
+	protocolChecker, err := newHTTPChecker(check)
+	if err != nil {
+		t.Fatalf("newHTTPChecker() error = %v", err)
+	}
+	checker := protocolChecker.(*httpChecker)
+	status := checker.check()
+
+	if status.status != testStatusOK {
+		t.Fatalf("check() status = %q, message = %q", status.status, status.msg)
+	}
+	if len(checker.assertions) != 1 || checker.assertions[0]["status"] != testStatusPass {
+		t.Fatalf("assertions = %#v, want one passing JSON body assertion", checker.assertions)
 	}
 }
 

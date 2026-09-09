@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 )
 
@@ -41,7 +42,10 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		"headers":          resHeaders,
 	}
 	if isCheckTestReq {
-		// finishTestRequest(c, _testBody)
+		checker.evaluateMultiStepJSONBodyAssertions(response, c, &testStatus)
+		if len(checker.assertions) > 0 {
+			checker.testBody["assertions"] = checker.assertions
+		}
 		return testStatus
 	}
 
@@ -98,6 +102,9 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 		} else {
 			for _, allallAssertions := range c.Request.HTTPMultiSteps {
 				for _, assert := range allallAssertions.Request.Assertions.HTTP.Cases {
+					if assert.Type == assertTypeHTTPJSONBody {
+						continue
+					}
 					checker.assertions = append(checker.assertions, map[string]string{
 						"type":   assert.Type,
 						"reason": "should be " + assert.Config.Operator + " " + assert.Config.Value,
@@ -108,6 +115,7 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 			}
 		}
 	}
+	checker.evaluateMultiStepJSONBodyAssertions(response, c, &testStatus)
 
 	resultStr, _ := json.Marshal(checker.assertions)
 	checker.attrs.PutStr("assertions", string(resultStr))
@@ -120,4 +128,36 @@ func (checker *httpChecker) checkHTTPMultiStepsRequest(c SyntheticCheck) testSta
 
 	// finishCheckRequest(c, testStatus, checker.timers, checker.attrs)
 	return testStatus
+}
+
+func (checker *httpChecker) evaluateMultiStepJSONBodyAssertions(response map[string]interface{}, c SyntheticCheck, status *testStatus) {
+	bodies, _ := response["assertion_bodies"].(map[string]interface{})
+
+	for stepIndex, step := range c.Request.HTTPMultiSteps {
+		body := ""
+		if bodies != nil {
+			body = fmt.Sprintf("%v", bodies[fmt.Sprintf("step_%d", stepIndex)])
+		}
+
+		for _, assertion := range step.Request.Assertions.HTTP.Cases {
+			if assertion.Type != assertTypeHTTPJSONBody {
+				continue
+			}
+
+			result, assertionStatus, messages := getHTTPTestCaseJSONBodyAssertions(body, assertion, nil)
+			result["type"] = assertion.Type
+			result["step"] = fmt.Sprintf("Step%d", stepIndex+1)
+			checker.assertions = append(checker.assertions, result)
+
+			if assertionStatus.status != testStatusOK {
+				status.status = testStatusFail
+				message := strings.Join(messages, "; ")
+				if status.msg == "" {
+					status.msg = message
+				} else {
+					status.msg += "; " + message
+				}
+			}
+		}
+	}
 }

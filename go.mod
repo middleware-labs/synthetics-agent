@@ -7,6 +7,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/gorilla/websocket v1.5.0
 	github.com/jhump/protoreflect v1.17.0
+	github.com/ohler55/ojg v1.28.4
 	github.com/prometheus-community/pro-bing v0.1.0
 	github.com/stretchr/testify v1.10.0
 	go.opentelemetry.io/collector/pdata v1.0.0-rc3.0.20230109164642-7d168dd20efd

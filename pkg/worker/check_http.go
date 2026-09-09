@@ -30,6 +30,7 @@ const (
 	assertTypeHTTPBody         = "body"
 	assertTypeHTTPBodyHash     = "body_hash"
 	assertTypeHTTPHeader       = "header"
+	assertTypeHTTPJSONBody     = "json_body"
 	assertTypeHTTPResponseTime = "response_time"
 	assertTypeHTTPStatusCode   = "status_code"
 )
@@ -713,6 +714,9 @@ func (checker *httpChecker) checkHTTPSingleStepRequest() testStatus {
 		switch assert.Type {
 		case assertTypeHTTPBody:
 			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyAssertions(bss, assert, testStatusMsg)
+
+		case assertTypeHTTPJSONBody:
+			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseJSONBodyAssertions(bss, assert, testStatusMsg)
 
 		case assertTypeHTTPBodyHash:
 			testAssertions, assertStatus, testStatusMsg = getHTTPTestCaseBodyHashAssertions(bss, assert, testStatusMsg)
