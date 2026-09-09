@@ -94,6 +94,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 		const JSONPaths = {}
 		const stepsResponse = {}
 		const stepsHeader = {}
+		const assertionBodies = {}
 		const assertions = {}
 
 		for (let i = 0; i < steps.length; i++) {
@@ -187,6 +188,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				body,
 				requestOptions
 			)
+			assertionBodies[stepKey] = String(response.body || '').slice(0, 102400)
 			let jsonResp = null;
 			try {
 				jsonResp = response.json()
@@ -203,6 +205,9 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 			}
 			const _assertions = {}
 			for (const assert of step.request.assertions) {
+				if (assert.type === 'json_body') {
+					continue
+				}
 				_assertions[assert.type] = {
 					"type":   assert.type,
 					"reason": assert.type.replace('_', ' ') + ' ' + (assert.config.operator || '').replace('_', ' ') + ' ' + assert.config.value,
@@ -211,6 +216,9 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 				}
 			}
 			for (const assert of step.request.assertions) {
+				if (assert.type === 'json_body') {
+					continue
+				}
 				if (assert.type === 'status_code') {
 					const _op = assert.config.operator
 					const _vl = parseInt(assert.config.value)
@@ -309,7 +317,7 @@ func CreateScriptSnippet(req SyntheticCheck) string {
 
 			assertions[stepKey] = _assertions
 		}
-		console.log('###START->', {steps: stepsResponse, assertions: assertions, headers: stepsHeader}, '<-END###')
+		console.log('###START->', {steps: stepsResponse, assertions: assertions, headers: stepsHeader, assertion_bodies: assertionBodies}, '<-END###')
 	}
 
 	`

@@ -213,3 +213,56 @@ func TestHTTPMultiStepRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestHTTPMultiStepRequest_JSONBodyAssertion(t *testing.T) {
+	check := SyntheticCheck{
+		SyntheticsModel: SyntheticsModel{
+			Request: SyntheticsRequestOptions{
+				HTTPMultiTest: true,
+				HTTPMultiSteps: []HTTPMultiStepsOptions{
+					{
+						StepName: "health",
+						Endpoint: "http://example.com",
+						Request: HTTPMultiStepsRequest{
+							HTTPMethod: "GET",
+							Assertions: AssertionsOptions{
+								HTTP: AssertionsCasesOptions{
+									Cases: []CaseOptions{
+										testJSONBodyCase("$.status", "equals", "healthy"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	protocolChecker, err := newHTTPChecker(check)
+	if err != nil {
+		t.Fatalf("newHTTPChecker() error = %v", err)
+	}
+	checker := protocolChecker.(*httpChecker)
+	checker.k6Scripter = &mockk6Scripter{
+		respValue: `{
+			"steps": {"step_0": {"status": "healthy"}},
+			"headers": {"step_0": {}},
+			"assertions": {"step_0": {}},
+			"assertion_bodies": {"step_0": "{\"status\":\"healthy\"}"}
+		}`,
+	}
+
+	status := checker.check()
+
+	if status.status != testStatusOK {
+		t.Fatalf("check() status = %q, message = %q", status.status, status.msg)
+	}
+	if len(checker.assertions) != 1 {
+		t.Fatalf("assertions = %#v, want one JSON body assertion", checker.assertions)
+	}
+	if checker.assertions[0]["status"] != testStatusPass ||
+		checker.assertions[0]["step"] != "Step1" {
+		t.Fatalf("assertion = %#v, want a passing Step1 assertion", checker.assertions[0])
+	}
+}

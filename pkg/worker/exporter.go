@@ -179,7 +179,7 @@ func (cs *CheckState) finishCheckRequest(testStatus testStatus,
 		dp.SetDoubleValue(value)
 
 		attrs.PutStr("check.id", strconv.Itoa(check.Id))
-		attrs.PutStr("check.test_id", testId)
+		attrs.PutStr("check.test_id", testId) //random
 		attrs.PutStr("check.status", testStatus.status)
 		attrs.PutStr("check.location", cs.location)
 		if testStatus.status != testStatusOK {
