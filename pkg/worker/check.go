@@ -183,6 +183,46 @@ func (cs *CheckState) liveTestFire() (map[string]interface{}, error) {
 	}, nil
 }
 
+// checkTimeRange allows overnight windows (start > end, e.g. 23:00-03:30); days_of_week applies to the day the window starts.
+func checkTimeRange(tr SpecifyTimeRange, now time.Time) error {
+	loc, err := time.LoadLocation(tr.Timezone)
+	if err != nil {
+		return err
+	}
+	now = now.In(loc)
+
+	start, err := time.Parse("15:04", tr.StartTime)
+	if err != nil {
+		return err
+	}
+	end, err := time.Parse("15:04", tr.EndTime)
+	if err != nil {
+		return err
+	}
+
+	secOfDay := func(t time.Time) int { return t.Hour()*3600 + t.Minute()*60 + t.Second() }
+	cur, startSec, endSec := secOfDay(now), secOfDay(start), secOfDay(end)
+
+	windowDay := now
+	switch {
+	case startSec <= endSec && cur >= startSec && cur <= endSec:
+	case startSec > endSec && cur >= startSec:
+	case startSec > endSec && cur <= endSec:
+		windowDay = now.AddDate(0, 0, -1)
+	default:
+		return fmt.Errorf("%s, current time %s outside %s-%s", errCheckNotAllowedToRun,
+			now.Format("15:04:05"), tr.StartTime, tr.EndTime)
+	}
+
+	day := strings.ToLower(windowDay.Weekday().String())
+	for _, d := range tr.DaysOfWeek {
+		if d == day {
+			return nil
+		}
+	}
+	return fmt.Errorf("%s, window day %s, allowed days %v", errCheckNotAllowedToRun, day, tr.DaysOfWeek)
+}
+
 func (cs *CheckState) fire(logs *[]string) error {
 	//	log.Printf("go: %d", runtime.NumGoroutine())
 	*logs = append(*logs, fmt.Sprintf("%s fire() started 1", time.Now().String()))
@@ -195,58 +235,10 @@ func (cs *CheckState) fire(logs *[]string) error {
 
 	*logs = append(*logs, fmt.Sprintf("%s fire() started 2", time.Now().String()))
 	if c.Request.SpecifyFrequency.SpecifyTimeRange.IsChecked {
-		allow := false
-		loc, err := time.LoadLocation(c.Request.SpecifyFrequency.SpecifyTimeRange.Timezone)
-		if err != nil {
-			return err
-		}
-		today := strings.ToLower(time.Now().In(loc).Weekday().String())
-		for _, day := range c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek {
-			if day == today {
-				allow = true
-			}
-		}
-		*logs = append(*logs, fmt.Sprintf("%s fire() started 3", time.Now().String()))
-
-		if !allow {
-			return fmt.Errorf("check %d: %s, current day %s, allowed days %v", cs.check.Id,
-				errCheckNotAllowedToRun, today,
-				c.Request.SpecifyFrequency.SpecifyTimeRange.DaysOfWeek)
-		}
-		*logs = append(*logs, fmt.Sprintf("%s fire() started 4", time.Now().String()))
-
-		currentDate := time.Now().In(loc)
-		timeFormat := "2006-01-02 15:04"
-
-		startTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
-			c.Request.SpecifyFrequency.SpecifyTimeRange.StartTime)
-		start, err := time.ParseInLocation(timeFormat, startTimeAppendDate, loc)
-		if err != nil {
-			return err
-		}
-		currentUnixTime := currentDate.UTC().Unix()
-		startUnixTime := start.UTC().Unix()
-		if currentUnixTime < startUnixTime {
-			return fmt.Errorf("check %d: %s, current time %d < start time %d", cs.check.Id,
-				errCheckNotAllowedToRun, currentUnixTime, startUnixTime)
-		}
-
-		*logs = append(*logs, fmt.Sprintf("%s fire() started 5", time.Now().String()))
-
-		endTimeAppendDate := fmt.Sprintf("%d-%02d-%02d %s", currentDate.Year(), currentDate.Month(), currentDate.Day(),
-			c.Request.SpecifyFrequency.SpecifyTimeRange.EndTime)
-		end, err := time.ParseInLocation(timeFormat, endTimeAppendDate, loc)
-		if err != nil {
-			return err
-		}
-
-		endUnixTime := end.UTC().Unix()
-		if currentUnixTime > endUnixTime {
-			return fmt.Errorf("check %d: %s, current time %d > end time %d", cs.check.Id,
-				errCheckNotAllowedToRun, currentUnixTime, endUnixTime)
+		if err := checkTimeRange(c.Request.SpecifyFrequency.SpecifyTimeRange, time.Now()); err != nil {
+			return fmt.Errorf("check %d: %w", cs.check.Id, err)
 		}
 		*logs = append(*logs, fmt.Sprintf("%s fire() started 6", time.Now().String()))
-
 	}
 
 	*logs = append(*logs, fmt.Sprintf("%s fire() started 7", time.Now().String()))
