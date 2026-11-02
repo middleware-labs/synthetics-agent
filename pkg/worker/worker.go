@@ -209,10 +209,8 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 	// instanceId := strings.ToLower(os.Getenv("HOSTNAME"))
 
 	consumerName := "subscribe-" + w.cfg.Hostname + "-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
-	url := w.cfg.Hostname + "/consumer/persistent/public/default/" +
-		topic + "/" + consumerName + "?token=" + token
-	slog.Info("subscribing to topic", slog.String("url", url),
-		slog.String("consumer", consumerName), slog.String("token", token))
+	// The topic and token both carry the account's API key, so neither is logged.
+	slog.Info("subscribing to topic", slog.String("consumer", consumerName))
 
 	var err error
 	w.consumer, err = w.pulsarClient.Consumer("persistent/public/default/"+topic,
