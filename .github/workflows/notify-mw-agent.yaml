@@ -39,7 +39,6 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-
       - name: Dispatch to mw-agent
         env:
           GH_TOKEN: ${{ secrets.RELEASE_CHAIN_TOKEN }}
