@@ -39,19 +39,10 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      # GITHUB_TOKEN cannot dispatch to another repository.
-      - name: Create GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          owner: middleware-labs
-          repositories: mw-agent
 
       - name: Dispatch to mw-agent
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_CHAIN_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh api repos/middleware-labs/mw-agent/dispatches \
