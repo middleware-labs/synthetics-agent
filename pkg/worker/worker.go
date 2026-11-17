@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -262,6 +263,18 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			"Id":         v.Id,
 			"AccountUID": v.AccountUID,
 			"topic":      topic,
+		}
+		if v.Action == opsaiSessionStartAction {
+			// Starting the task can take seconds; keep the receive loop free.
+			go func(v SyntheticCheck, msg *ws.Msg) {
+				if err := startOpsAISession(context.Background(), os.Getenv("BROWSER_HUB_URL"), v.Result); err != nil {
+					slog.Error("failed to start opsai testing session", slog.String("error", err.Error()))
+				}
+				if err := w.consumer.Ack(context.Background(), msg); err != nil {
+					slog.Error("failed to ack the msg", slog.String("error", err.Error()))
+				}
+			}(v, msg)
+			continue
 		}
 		if v.Action == "mcp-k8s" {
 			command, ok := v.Result["command"].(string)
