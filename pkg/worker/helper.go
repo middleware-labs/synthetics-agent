@@ -77,6 +77,7 @@ type SyntheticsRequestOptions struct {
 	GRPCPayload               GRPCPayloadOptions      `json:"grpc_payload"`
 	UDPPayload                UDPPayloadOptions       `json:"udp_payload"`
 	WSPayload                 WSPayloadOptions        `json:"ws_payload"`
+	BrowserPayload            BrowserPayloadOptions   `json:"browser_payload"`
 	SpecifyFrequency          SpecifyFrequencyOptions `json:"specify_frequency"`
 	Assertions                AssertionsOptions       `json:"assertions"`
 	AlertConditions           AlertConditionsOptions  `json:"alert_conditions"`
@@ -96,6 +97,21 @@ type SyntheticsRequestOptions struct {
 	DisableCors               bool                    `json:"disable_cors"`
 	DisableCSP                bool                    `json:"disable_csp"`
 }
+
+// BrowserPayloadOptions holds a browser test's {{NAME}} variables. Bifrost
+// fills in the values (for example from an OpsAI Testing profile) when it
+// publishes the check; the worker substitutes them into the recording.
+type BrowserPayloadOptions struct {
+	Variables []BrowserVariable `json:"variables"`
+}
+
+// BrowserVariable is one {{NAME}} variable. Values can be secrets: never log them.
+type BrowserVariable struct {
+	Name     string `json:"name"`
+	Value    string `json:"value"`
+	IsHidden bool   `json:"isHidden"`
+}
+
 type HTTPMultiStepsRequest struct {
 	HTTPMethod  string               `json:"http_method"`
 	HTTPVersion string               `json:"http_version"`

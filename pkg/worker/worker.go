@@ -361,7 +361,8 @@ func (w *Worker) SubscribeUpdates(topic string, token string) {
 			}
 
 			if v.Action != "update" && v.Action != "delete" {
-				slog.Info("invalid action message", slog.String("payload", string(msg.Payload)))
+				// Not the payload: a check can carry secrets (basic auth, browser variables).
+				slog.Info("invalid action message", slog.String("action", v.Action), slog.String("key", msg.Key))
 				err := w.consumer.Ack(context.Background(), msg)
 				if err != nil {
 					slog.Error("failed to ack message", slog.String("error", err.Error()))
