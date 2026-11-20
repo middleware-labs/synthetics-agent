@@ -3,11 +3,13 @@ package worker
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -118,9 +120,10 @@ func browserVariables(variables []BrowserVariable) []map[string]string {
 	return out
 }
 
-// runBrowserTest asks browser-hub to run the test. The args carry secrets
-// (basic auth, variables): never log them.
-func (checker *browserChecker) runBrowserTest(args CommandArgs) {
+// runBrowserTest asks browser-hub to start the test and returns its reply.
+// Any answer other than 200 is an error carrying the hub's reason. The args
+// carry secrets (basic auth, variables): never log them.
+func (checker *browserChecker) runBrowserTest(args CommandArgs) (string, error) {
 	cmdArgs := map[string]interface{}{
 		"variables":                browserVariables(checker.c.Request.BrowserPayload.Variables),
 		"browser":                  args.Browser,
@@ -158,15 +161,13 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 
 	url := os.Getenv("BROWSER_HUB_URL")
 	if url == "" {
-		slog.Error("BROWSER_HUB_URL environment variable not set")
-		return
+		return "", errors.New("BROWSER_HUB_URL environment variable not set")
 	}
 
-	// Make the HTTP POST request
+	// The payload carries secrets (basic auth, cookies): never log it.
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		slog.Error("Failed to marshal payload")
-		return
+		return "", fmt.Errorf("marshal browser-hub payload: %w", err)
 	}
 
 	httpClient := &http.Client{
@@ -175,23 +176,41 @@ func (checker *browserChecker) runBrowserTest(args CommandArgs) {
 
 	resp, err := httpClient.Post(fmt.Sprintf("%s/start", url), "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
-		slog.Error("HTTP request failed", slog.String("error", err.Error()))
-		return
+		return "", fmt.Errorf("browser-hub request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusOK {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			slog.Error(err.Error())
-		}
-		bodyString := string(bodyBytes)
-		slog.Info(bodyString)
+	// browser-hub answers {"status": "..."}; the status names the failure.
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+	reply := strings.TrimSpace(string(bodyBytes))
+	var hubReply struct {
+		Status string `json:"status"`
 	}
+	if json.Unmarshal(bodyBytes, &hubReply) == nil && hubReply.Status != "" {
+		reply = hubReply.Status
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("browser-hub returned %d: %s", resp.StatusCode, reply)
+	}
+	return reply, nil
 }
 
+// Check asks browser-hub to start the test. The worker reports the test's
+// own result; this only says whether it was started.
 func (checker *browserChecker) Check() testStatus {
 	args := checker.CmdArgs
-	checker.runBrowserTest(args)
-	return testStatus{}
+	reply, err := checker.runBrowserTest(args)
+	if err != nil {
+		slog.Error("browser test not started",
+			slog.Int("checkId", checker.c.Id),
+			slog.String("testId", args.TestId),
+			slog.String("error", err.Error()))
+		return testStatus{status: testStatusError, msg: err.Error()}
+	}
+	slog.Info("browser test started",
+		slog.Int("checkId", checker.c.Id),
+		slog.String("testId", args.TestId),
+		slog.String("hub", reply))
+	return testStatus{status: testStatusOK}
 }
