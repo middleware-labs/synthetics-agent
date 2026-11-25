@@ -99,7 +99,7 @@ type SyntheticsRequestOptions struct {
 }
 
 // BrowserPayloadOptions holds a browser test's {{NAME}} variables. Bifrost
-// fills in the values (for example from an OpsAI Testing profile) when it
+// fills in the values (for example from an OpsAI Browser Test profile) when it
 // publishes the check; the worker substitutes them into the recording.
 type BrowserPayloadOptions struct {
 	Variables []BrowserVariable `json:"variables"`

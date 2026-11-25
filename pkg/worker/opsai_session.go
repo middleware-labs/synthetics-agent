@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// opsaiSessionStartAction asks this location to start an OpsAI Testing
+// opsaiSessionStartAction asks this location to start an OpsAI Browser Test
 // browser session. bifrost publishes it on location-<region> with the
 // session args under result.session; the agent hands them to browser-hub.
 const opsaiSessionStartAction = "opsai-session-start"
