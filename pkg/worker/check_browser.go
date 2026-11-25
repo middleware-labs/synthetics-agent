@@ -107,10 +107,25 @@ func (checker *browserChecker) getAttrs() pcommon.Map {
 	return checker.attrs
 }
 
+// browserVariables are the test's {{NAME}} variables as the worker's
+// applyVariables takes them; empty names are dropped.
+func browserVariables(variables []BrowserVariable) []map[string]string {
+	out := make([]map[string]string, 0, len(variables))
+	for _, variable := range variables {
+		if variable.Name == "" {
+			continue
+		}
+		out = append(out, map[string]string{"name": variable.Name, "value": variable.Value})
+	}
+	return out
+}
+
 // runBrowserTest asks browser-hub to start the test and returns its reply.
-// Any answer other than 200 is an error carrying the hub's reason.
+// Any answer other than 200 is an error carrying the hub's reason. The args
+// carry secrets (basic auth, variables): never log them.
 func (checker *browserChecker) runBrowserTest(args CommandArgs) (string, error) {
 	cmdArgs := map[string]interface{}{
+		"variables":                browserVariables(checker.c.Request.BrowserPayload.Variables),
 		"browser":                  args.Browser,
 		"device":                   args.Device,
 		"region":                   args.Region,
